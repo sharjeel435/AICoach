@@ -1,6 +1,6 @@
-# Bravely - AI Interview Intelligence
+# AICoachy - AI Interview Intelligence
 
-Bravely is a local-first interview coaching workspace. It creates targeted
+AICoachy is a local-first interview coaching workspace. It creates targeted
 mock interviews, accepts voice or typed answers, analyzes answer quality and
 delivery, adapts follow-up questions, and saves detailed performance reports.
 
@@ -49,7 +49,7 @@ Open `http://localhost:5173`.
 
 ## Free local AI with Ollama
 
-Bravely does not require Ollama, but it can use it for richer adaptive feedback.
+AICoachy does not require Ollama, but it can use it for richer adaptive feedback.
 
 1. Install Ollama from `https://ollama.com`.
 2. Download a model:

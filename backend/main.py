@@ -19,7 +19,7 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.getenv("DATABASE_PATH", BASE_DIR / "coach.db"))
-app = FastAPI(title="Bravely Interview Intelligence API", version="2.0.0")
+app = FastAPI(title="AICoachy Interview Intelligence API", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -549,7 +549,7 @@ def export_report(session_id: str) -> str:
         report = session_report(connection, session_id)
     session = report["session"]
     lines = [
-        f"# Bravely Interview Report: {session['role_title']}",
+        f"# AICoachy Interview Report: {session['role_title']}",
         "", f"Overall score: {report['overall_score']}/100",
         f"Strongest area: {report['top_strength']}", f"Focus area: {report['focus_area']}", "",
         "## Competency scores",
