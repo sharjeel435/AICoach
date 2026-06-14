@@ -1,0 +1,22 @@
+services:
+  api:
+    build: ./backend
+    environment:
+      DATABASE_PATH: /data/coach.db
+      OLLAMA_URL: ${OLLAMA_URL:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - coach-data:/data
+    restart: unless-stopped
+
+  web:
+    build: .
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  coach-data:

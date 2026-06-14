@@ -1,564 +1,352 @@
-import { createElement, useEffect, useMemo, useRef, useState } from "react";
+import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft,
-  ArrowRight,
-  BriefcaseBusiness,
-  Check,
-  ChevronDown,
-  CircleCheck,
-  Clock3,
-  Code2,
-  Lightbulb,
-  LoaderCircle,
-  Menu,
-  MessageSquareText,
-  Mic,
-  MicOff,
-  RotateCcw,
-  Sparkles,
-  Square,
-  Target,
-  TrendingUp,
-  Volume2,
-  X,
+  Activity, ArrowLeft, ArrowRight, BarChart3, BookOpen, BrainCircuit, BriefcaseBusiness,
+  Check, ChevronRight, CircleCheck, Clock3, Code2, Download, FileText, Gauge, Headphones,
+  History, LayoutDashboard, Lightbulb, LoaderCircle, Menu, MessageSquareText, Mic, Pause,
+  Play, Plus, RotateCcw, Settings2, Sparkles, Square, Target, TrendingUp, Upload, UserRound,
+  Volume2, WandSparkles, X, Zap,
 } from "lucide-react";
 
-const ROLES = [
-  {
-    id: "product-manager",
-    title: "Product Manager",
-    company: "Tech & SaaS",
-    icon: Target,
-    color: "coral",
-    description: "Strategy, discovery, prioritization, and cross-functional leadership.",
-    questions: 6,
-  },
-  {
-    id: "software-engineer",
-    title: "Software Engineer",
-    company: "Product Engineering",
-    icon: Code2,
-    color: "blue",
-    description: "Technical decisions, collaboration, debugging, and system thinking.",
-    questions: 6,
-  },
-  {
-    id: "marketing-manager",
-    title: "Marketing Manager",
-    company: "Growth & Brand",
-    icon: TrendingUp,
-    color: "gold",
-    description: "Campaign strategy, customer insight, measurement, and storytelling.",
-    questions: 6,
-  },
-  {
-    id: "ux-designer",
-    title: "UX Designer",
-    company: "Design & Research",
-    icon: Sparkles,
-    color: "purple",
-    description: "Research, design rationale, stakeholder feedback, and user outcomes.",
-    questions: 6,
-  },
+const PROFILE_ID = "local-user";
+const ROLE_META = {
+  "Product Manager": { icon: Target, tone: "coral", blurb: "Strategy, discovery, prioritization, and influence." },
+  "Software Engineer": { icon: Code2, tone: "blue", blurb: "Systems, technical judgment, ownership, and collaboration." },
+  "Marketing Manager": { icon: TrendingUp, tone: "gold", blurb: "Growth, customer insight, analytics, and storytelling." },
+  "UX Designer": { icon: Sparkles, tone: "violet", blurb: "Research, design rationale, outcomes, and collaboration." },
+};
+const MODES = [
+  { name: "Full interview", icon: BrainCircuit, description: "A balanced, adaptive interview across core competencies." },
+  { name: "Behavioral drill", icon: MessageSquareText, description: "Practice concise STAR stories and leadership signals." },
+  { name: "Role deep dive", icon: BriefcaseBusiness, description: "High-signal questions focused on role expertise." },
+  { name: "Rapid fire", icon: Zap, description: "Short, energetic answers under tighter time pressure." },
 ];
-
 const SAMPLE_FEEDBACK = {
-  overall_score: 82,
-  summary:
-    "You gave a clear, credible example and showed strong ownership. The answer would land even better with a sharper opening and one concrete business result.",
-  scores: { clarity: 86, depth: 78, relevance: 84, structure: 80 },
-  strengths: [
-    "You made your personal contribution easy to identify.",
-    "The trade-off between speed and confidence felt realistic.",
-    "Your explanation stayed focused on the customer problem.",
-  ],
-  improvements: [
-    "Lead with the outcome before walking through the process.",
-    "Add a metric that shows the impact of your decision.",
-    "Close by naming what you learned or would repeat.",
-  ],
-  better_answer:
-    "I led a pricing-page redesign after research showed prospects were struggling to compare plans. I aligned sales, design, and engineering around one success metric: trial-to-paid conversion. We shipped a simplified comparison experience in three weeks, then tested it against the existing page. Conversion increased 14%, and support questions about plan differences fell 22%. The experience taught me to define the decision metric before debating solutions.",
+  overall_score: 78,
+  summary: "Your answer has a credible core. Make your ownership and measurable impact more explicit.",
+  scores: { clarity: 82, depth: 75, relevance: 83, structure: 74, delivery: 77 },
+  strengths: ["You used a specific professional situation.", "Your response sounded natural.", "Your decision process was understandable."],
+  improvements: ["Lead with the result.", "Separate your actions from the team.", "Add a measurable outcome."],
+  better_answer: "Lead with the outcome, establish the context briefly, explain the decision you owned, and close with the measurable result.",
+  star: { situation: 82, task: 74, action: 78, result: 61 },
 };
 
+async function api(path, options = {}) {
+  const response = await fetch(`/api${path}`, {
+    headers: { "Content-Type": "application/json", ...options.headers },
+    ...options,
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Request failed");
+  return response.json();
+}
+
 function App() {
-  const [view, setView] = useState("home");
-  const [role, setRole] = useState(null);
+  const [page, setPage] = useState("dashboard");
+  const [dashboard, setDashboard] = useState({ stats: {}, sessions: [], trend: [] });
+  const [health, setHealth] = useState({ provider: "local" });
+  const [setup, setSetup] = useState({
+    role_title: "Product Manager", company: "", seniority: "Mid-level", mode: "Full interview",
+    difficulty: "Adaptive", interviewer_style: "Balanced", total_questions: 6,
+    resume_text: "", job_description: "",
+  });
+  const [target, setTarget] = useState(null);
   const [session, setSession] = useState(null);
-  const [answer, setAnswer] = useState("");
-  const [feedback, setFeedback] = useState(null);
   const [history, setHistory] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [error, setError] = useState("");
-  const recognitionRef = useRef(null);
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState("");
 
-  const questionNumber = history.length + 1;
-  const progress = session
-    ? Math.min((questionNumber / session.total_questions) * 100, 100)
-    : 0;
-
-  useEffect(() => {
-    return () => recognitionRef.current?.stop();
+  const refreshDashboard = useCallback(async () => {
+    try {
+      const [data, status] = await Promise.all([
+        api(`/dashboard/${PROFILE_ID}`), api("/health"),
+      ]);
+      setDashboard(data);
+      setHealth(status);
+    } catch {
+      setHealth({ provider: "local" });
+    }
   }, []);
 
-  const api = async (path, options = {}) => {
-    const response = await fetch(`/api${path}`, {
-      headers: { "Content-Type": "application/json" },
-      ...options,
-    });
-    if (!response.ok) throw new Error("The coach could not respond. Please try again.");
-    return response.json();
-  };
+  useEffect(() => { refreshDashboard(); }, [refreshDashboard]);
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = setTimeout(() => setToast(""), 2800);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
-  const startInterview = async (selectedRole) => {
-    setRole(selectedRole);
-    setIsLoading(true);
-    setError("");
+  const startSession = async () => {
+    setLoading(true);
     try {
+      let targetData = target;
+      if (setup.resume_text.trim() || setup.job_description.trim()) {
+        targetData = await api("/targets", {
+          method: "POST", body: JSON.stringify({ profile_id: PROFILE_ID, ...setup }),
+        });
+        setTarget(targetData);
+      }
       const data = await api("/sessions", {
         method: "POST",
-        body: JSON.stringify({
-          role_id: selectedRole.id,
-          role_title: selectedRole.title,
-          total_questions: selectedRole.questions,
-        }),
+        body: JSON.stringify({ profile_id: PROFILE_ID, target_id: targetData?.id || null, ...setup }),
       });
       setSession(data);
-    } catch {
-      setSession({
-        session_id: crypto.randomUUID(),
-        question:
-          "Tell me about a time you had to make an important decision with incomplete information. What did you do, and what happened?",
-        question_type: "Behavioral",
-        total_questions: selectedRole.questions,
-        demo_mode: true,
-      });
+      setHistory([]);
+      setPage("studio");
+    } catch (error) {
+      setToast(error.message);
     } finally {
-      setView("interview");
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const submitAnswer = async () => {
-    if (answer.trim().length < 30) {
-      setError("Give yourself a little more room. Aim for at least 2–3 sentences.");
-      return;
-    }
-    setError("");
-    setIsLoading(true);
+  const openReport = async (id) => {
+    setLoading(true);
     try {
-      const data = await api(`/sessions/${session.session_id}/answers`, {
-        method: "POST",
-        body: JSON.stringify({
-          question: session.question,
-          answer,
-          question_number: questionNumber,
-          role_title: role.title,
-        }),
-      });
-      setFeedback(data.feedback);
-      setSession((current) => ({ ...current, next_question: data.next_question }));
-    } catch {
-      setFeedback(SAMPLE_FEEDBACK);
-      setSession((current) => ({
-        ...current,
-        next_question:
-          "Describe a project that did not go as planned. How did you respond, and what did you change afterward?",
-      }));
+      const data = await api(`/sessions/${id}/report`);
+      setReport(data);
+      setPage("report");
+    } catch (error) {
+      setToast(error.message);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const nextQuestion = () => {
-    const completed = {
-      question: session.question,
-      answer,
-      feedback,
-      score: feedback.overall_score,
-    };
-    const nextHistory = [...history, completed];
-    setHistory(nextHistory);
-    setFeedback(null);
-    setAnswer("");
-    setError("");
-
-    if (nextHistory.length >= session.total_questions) {
-      setView("results");
-      return;
-    }
-
-    setSession((current) => ({
-      ...current,
-      question:
-        current.next_question ||
-        "What is a piece of difficult feedback you received, and how did you act on it?",
-      question_type: nextHistory.length % 2 === 0 ? "Behavioral" : "Role specific",
-    }));
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const toggleListening = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-      return;
-    }
-
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setError("Voice input is not supported in this browser. Chrome works best.");
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-    let committed = answer;
-
-    recognition.onresult = (event) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) committed += `${committed ? " " : ""}${transcript}`;
-        else interim += transcript;
-      }
-      setAnswer(`${committed}${interim ? ` ${interim}` : ""}`);
-    };
-    recognition.onerror = () => {
-      setIsListening(false);
-      setError("I lost the microphone. You can continue by typing.");
-    };
-    recognition.onend = () => setIsListening(false);
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
-    setError("");
-  };
-
-  const reset = () => {
-    recognitionRef.current?.stop();
-    setView("home");
-    setRole(null);
-    setSession(null);
-    setAnswer("");
-    setFeedback(null);
-    setHistory([]);
-    setError("");
+  const finishSession = async () => {
+    await refreshDashboard();
+    await openReport(session.session_id);
   };
 
   return (
-    <div className="app">
-      <Header onLogoClick={reset} />
-      {view === "home" && (
-        <Home roles={ROLES} onStart={startInterview} isLoading={isLoading} />
-      )}
-      {view === "interview" && session && (
-        <Interview
-          role={role}
-          session={session}
-          questionNumber={questionNumber}
-          progress={progress}
-          answer={answer}
-          setAnswer={setAnswer}
-          feedback={feedback}
-          onSubmit={submitAnswer}
-          onNext={nextQuestion}
-          onBack={reset}
-          isLoading={isLoading}
-          isListening={isListening}
-          toggleListening={toggleListening}
-          error={error}
-        />
-      )}
-      {view === "results" && (
-        <Results role={role} history={history} onRestart={reset} />
-      )}
+    <div className="shell">
+      <Sidebar page={page} setPage={setPage} provider={health.provider} onNew={() => setPage("setup")} />
+      <div className="main-shell">
+        <Topbar page={page} onNew={() => setPage("setup")} />
+        {page === "dashboard" && <Dashboard data={dashboard} onNew={() => setPage("setup")} onOpen={openReport} />}
+        {page === "setup" && <Setup setup={setup} setSetup={setSetup} target={target} setTarget={setTarget} onStart={startSession} loading={loading} />}
+        {page === "studio" && session && (
+          <Studio session={session} setSession={setSession} setup={setup} history={history} setHistory={setHistory} onFinish={finishSession} />
+        )}
+        {page === "history" && <HistoryPage data={dashboard} onOpen={openReport} onNew={() => setPage("setup")} />}
+        {page === "report" && report && <Report report={report} onNew={() => setPage("setup")} />}
+        {loading && page !== "setup" && <div className="screen-loader"><LoaderCircle className="spin" /></div>}
+      </div>
+      {toast && <div className="toast"><CircleCheck size={17} /> {toast}</div>}
     </div>
   );
 }
 
-function Header({ onLogoClick }) {
+function Sidebar({ page, setPage, provider, onNew }) {
+  const links = [
+    ["dashboard", LayoutDashboard, "Overview"], ["setup", Plus, "New interview"],
+    ["history", History, "Session history"],
+  ];
   return (
-    <header className="site-header">
-      <button className="brand" onClick={onLogoClick} aria-label="Bravely home">
-        <span className="brand-mark"><Sparkles size={18} /></span>
-        <span>bravely</span>
-      </button>
+    <aside className="sidebar">
+      <button className="brand" onClick={() => setPage("dashboard")}><span><Sparkles size={17} /></span>bravely</button>
       <nav>
-        <a href="#how-it-works">How it works</a>
-        <a href="#roles">Practice roles</a>
-        <button className="nav-button" onClick={onLogoClick}>Start practicing</button>
+        <p>Workspace</p>
+        {links.map(([id, icon, label]) => (
+          <button key={id} className={page === id ? "active" : ""} onClick={() => id === "setup" ? onNew() : setPage(id)}>
+            {createElement(icon, { size: 18 })}{label}
+          </button>
+        ))}
+        <p>Development</p>
+        <button onClick={() => setPage("history")}><BookOpen size={18} />Answer library</button>
+        <button onClick={() => setPage("dashboard")}><BarChart3 size={18} />Performance</button>
       </nav>
-      <button className="menu-button" aria-label="Open menu"><Menu /></button>
+      <div className="provider-card">
+        <span className={`provider-dot ${provider}`} />
+        <div><strong>{provider === "local" ? "Local intelligence" : `${provider} connected`}</strong><small>{provider === "local" ? "Private, no API key" : "Enhanced AI coaching"}</small></div>
+      </div>
+      <div className="profile-chip"><span>SS</span><div><strong>Sharjeel</strong><small>Interview workspace</small></div><Settings2 size={16} /></div>
+    </aside>
+  );
+}
+
+function Topbar({ page, onNew }) {
+  const titles = { dashboard: "Interview command center", setup: "Build your interview", studio: "Live interview studio", history: "Session history", report: "Performance report" };
+  return (
+    <header className="topbar">
+      <div><span className="mobile-menu"><Menu size={20} /></span><strong>{titles[page]}</strong></div>
+      <button className="topbar-cta" onClick={onNew}><Plus size={16} /> New interview</button>
     </header>
   );
 }
 
-function Home({ roles, onStart, isLoading }) {
-  const [selected, setSelected] = useState(roles[0]);
-
+function Dashboard({ data, onNew, onOpen }) {
+  const stats = data.stats || {};
+  const recent = data.sessions || [];
   return (
-    <main>
-      <section className="hero">
-        <div className="eyebrow"><span /> Your private interview room</div>
-        <h1>Practice out loud.<br /><em>Show up ready.</em></h1>
-        <p className="hero-copy">
-          Real interview questions, thoughtful AI coaching, and a space to
-          find the words before they really count.
-        </p>
-        <div className="hero-actions">
-          <a className="primary-button" href="#roles">
-            Choose your role <ArrowRight size={18} />
-          </a>
-          <a className="text-link" href="#how-it-works">See how it works <span>↓</span></a>
+    <main className="page dashboard-page">
+      <section className="welcome">
+        <div><span className="eyebrow">Sunday practice brief</span><h1>Build the answer<br />before the pressure.</h1><p>Target the role, practice out loud, and turn every response into evidence of how you think.</p><button className="primary" onClick={onNew}>Start a targeted interview <ArrowRight size={17} /></button></div>
+        <div className="readiness-card">
+          <div className="readiness-top"><span>Interview readiness</span><strong>{stats.average_score || 0}<small>/100</small></strong></div>
+          <div className="readiness-ring" style={{ "--value": stats.average_score || 0 }}><div><BrainCircuit /><strong>{stats.total_sessions ? "Developing" : "Start here"}</strong><span>{stats.questions_answered || 0} answers analyzed</span></div></div>
+          <div className="readiness-foot"><span><i className="green" />Clarity</span><span><i className="amber" />Impact</span><span><i />Delivery</span></div>
         </div>
-        <div className="proof-row">
-          <div className="avatar-stack">
-            <span>MK</span><span>AJ</span><span>SL</span>
-          </div>
-          <div><strong>4,200+ practice sessions</strong><small>Built for the moment before the moment.</small></div>
-        </div>
-        <div className="hero-note note-one">“Be specific. What changed because of you?”</div>
-        <div className="hero-note note-two"><Mic size={17} /> Voice practice on</div>
       </section>
 
-      <section className="roles-section" id="roles">
-        <div className="section-heading">
-          <div>
-            <span className="section-kicker">Pick your practice room</span>
-            <h2>What are you preparing for?</h2>
-          </div>
-          <p>Each session adapts its questions and feedback to the role you choose.</p>
-        </div>
-        <div className="role-grid">
-          {roles.map((item) => {
-            const Icon = item.icon;
-            const active = selected.id === item.id;
-            return (
-              <button
-                key={item.id}
-                className={`role-card ${active ? "selected" : ""}`}
-                onClick={() => setSelected(item)}
-              >
-                <span className={`role-icon ${item.color}`}><Icon size={22} /></span>
-                <span className="role-check">{active && <Check size={15} />}</span>
-                <span className="role-company">{item.company}</span>
-                <strong>{item.title}</strong>
-                <p>{item.description}</p>
-                <span className="role-meta"><MessageSquareText size={14} /> {item.questions} tailored questions</span>
-              </button>
-            );
-          })}
-        </div>
-        <button
-          className="start-session"
-          onClick={() => onStart(selected)}
-          disabled={isLoading}
-        >
-          {isLoading ? <LoaderCircle className="spin" size={19} /> : <Mic size={19} />}
-          Start {selected.title} practice
-          <ArrowRight size={19} />
-        </button>
-        <p className="privacy-note">No sign-up needed. Your practice stays private.</p>
+      <section className="metric-grid">
+        <Metric icon={MessageSquareText} label="Questions answered" value={stats.questions_answered || 0} note="Across all practice sessions" />
+        <Metric icon={Gauge} label="Average score" value={`${stats.average_score || 0}%`} note="Quality across five dimensions" />
+        <Metric icon={TrendingUp} label="Personal best" value={`${stats.best_score || 0}%`} note={stats.best_score ? "Keep raising the floor" : "Your first benchmark awaits"} />
+        <Metric icon={Clock3} label="Practice sessions" value={stats.total_sessions || 0} note="Saved automatically" />
       </section>
 
-      <section className="how-section" id="how-it-works">
-        <div className="section-heading">
-          <div>
-            <span className="section-kicker">A better way to rehearse</span>
-            <h2>Practice that actually changes your answer.</h2>
-          </div>
+      <section className="dashboard-grid">
+        <div className="panel progress-panel">
+          <PanelHead kicker="Performance" title="Your practice trajectory" action="Last 8 sessions" />
+          <TrendChart values={data.trend || []} />
+          <div className="chart-caption"><span><i />Overall score</span><strong>{data.trend?.length ? `+${Math.max(0, data.trend.at(-1) - data.trend[0])} points` : "Complete a session to begin"}</strong></div>
         </div>
-        <div className="steps-grid">
-          <article><span>01</span><Mic /><h3>Answer naturally</h3><p>Speak or type. Take the space you need to think through a real example.</p></article>
-          <article><span>02</span><Sparkles /><h3>Get useful feedback</h3><p>See what was clear, what was missing, and where your story can work harder.</p></article>
-          <article><span>03</span><TrendingUp /><h3>Watch yourself improve</h3><p>Move through a focused session and leave with stronger stories ready to use.</p></article>
+        <div className="panel focus-panel">
+          <PanelHead kicker="Recommended next" title="Your highest-value drill" />
+          <span className="focus-icon"><Target /></span><h3>Make impact measurable</h3>
+          <p>Practice closing every story with a baseline, a result, and why that result mattered.</p>
+          <div className="focus-meta"><span>10 minutes</span><span>Behavioral</span><span>3 questions</span></div>
+          <button onClick={onNew}>Start focused drill <ChevronRight size={16} /></button>
         </div>
+      </section>
+
+      <section className="recent-section">
+        <PanelHead kicker="Saved automatically" title="Recent sessions" action={`${recent.length} total`} />
+        {recent.length ? <SessionTable sessions={recent.slice(0, 5)} onOpen={onOpen} /> : <EmptySessions onNew={onNew} />}
       </section>
     </main>
   );
 }
 
-function Interview({
-  role,
-  session,
-  questionNumber,
-  progress,
-  answer,
-  setAnswer,
-  feedback,
-  onSubmit,
-  onNext,
-  onBack,
-  isLoading,
-  isListening,
-  toggleListening,
-  error,
-}) {
-  const words = answer.trim() ? answer.trim().split(/\s+/).length : 0;
+function Metric({ icon, label, value, note }) {
+  return <article className="metric"><div><span>{createElement(icon, { size: 18 })}</span><small>{label}</small></div><strong>{value}</strong><p>{note}</p></article>;
+}
+function PanelHead({ kicker, title, action }) {
+  return <div className="panel-head"><div><span>{kicker}</span><h2>{title}</h2></div>{action && <small>{action}</small>}</div>;
+}
+function TrendChart({ values }) {
+  const points = values.length ? values : [42, 52, 49, 63, 67, 72, 76, 81];
+  const coords = points.map((value, index) => `${(index / Math.max(points.length - 1, 1)) * 100},${100 - value}`).join(" ");
+  return <div className="trend-chart"><div className="grid-lines"><i /><i /><i /><i /></div><svg viewBox="0 0 100 100" preserveAspectRatio="none"><defs><linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#df7358" stopOpacity=".26" /><stop offset="100%" stopColor="#df7358" stopOpacity="0" /></linearGradient></defs><polygon points={`0,100 ${coords} 100,100`} fill="url(#chartFill)" /><polyline points={coords} fill="none" stroke="#df7358" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg></div>;
+}
 
+function Setup({ setup, setSetup, target, setTarget, onStart, loading }) {
+  const [step, setStep] = useState(1);
+  const update = (key, value) => { setSetup((current) => ({ ...current, [key]: value })); setTarget(null); };
   return (
-    <main className="interview-page">
-      <div className="interview-topbar">
-        <button className="back-button" onClick={onBack}><ArrowLeft size={17} /> Leave session</button>
-        <div className="role-pill"><BriefcaseBusiness size={15} /> {role.title}</div>
-        <div className="question-count">{questionNumber} of {session.total_questions}</div>
-      </div>
-      <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
-
-      <div className="interview-layout">
-        <section className="question-panel">
-          <div className="question-label">
-            <span>{session.question_type}</span>
-            <span><Clock3 size={14} /> Take 2–3 minutes</span>
-          </div>
-          <h1>{session.question}</h1>
-          <button
-            className="listen-button"
-            onClick={() => {
-              window.speechSynthesis.cancel();
-              window.speechSynthesis.speak(new SpeechSynthesisUtterance(session.question));
-            }}
-          >
-            <Volume2 size={17} /> Hear question
-          </button>
-          <div className="coach-tip">
-            <Lightbulb size={19} />
-            <div><strong>Coach’s nudge</strong><p>Try the STAR structure: set the scene, explain your task, focus on your actions, and finish with the result.</p></div>
+    <main className="page setup-page">
+      <div className="setup-header"><span className="eyebrow">Interview builder</span><h1>Design a practice session<br />for the exact opportunity.</h1><p>Add the real context now, and every question becomes more useful.</p></div>
+      <div className="stepper">{["Target role", "Job intelligence", "Interview style"].map((label, index) => <button key={label} className={step === index + 1 ? "active" : step > index + 1 ? "done" : ""} onClick={() => setStep(index + 1)}><span>{step > index + 1 ? <Check size={14} /> : index + 1}</span><div><small>Step 0{index + 1}</small><strong>{label}</strong></div></button>)}</div>
+      <div className="builder-layout">
+        <section className="builder-panel">
+          {step === 1 && <RoleStep setup={setup} update={update} />}
+          {step === 2 && <TargetStep setup={setup} update={update} target={target} />}
+          {step === 3 && <StyleStep setup={setup} update={update} />}
+          <div className="builder-actions">
+            <button className="secondary" disabled={step === 1} onClick={() => setStep((value) => value - 1)}><ArrowLeft size={16} /> Back</button>
+            {step < 3 ? <button className="primary" onClick={() => setStep((value) => value + 1)}>Continue <ArrowRight size={16} /></button> : <button className="primary" onClick={onStart} disabled={loading}>{loading ? <LoaderCircle className="spin" /> : <Mic size={17} />} Enter interview studio</button>}
           </div>
         </section>
-
-        <section className="answer-panel">
-          {!feedback ? (
-            <>
-              <div className="answer-heading">
-                <div><span>Your answer</span><small>{words} words</small></div>
-                <button
-                  className={`mic-button ${isListening ? "recording" : ""}`}
-                  onClick={toggleListening}
-                >
-                  {isListening ? <Square size={15} fill="currentColor" /> : <Mic size={17} />}
-                  {isListening ? "Stop recording" : "Answer with voice"}
-                </button>
-              </div>
-              <div className={`answer-box ${isListening ? "is-listening" : ""}`}>
-                {isListening && (
-                  <div className="recording-state">
-                    <span className="record-dot" />
-                    Listening
-                    <div className="wave"><i /><i /><i /><i /><i /></div>
-                  </div>
-                )}
-                <textarea
-                  value={answer}
-                  onChange={(event) => setAnswer(event.target.value)}
-                  placeholder="Start speaking, or type your answer here…"
-                  disabled={isLoading}
-                />
-                <div className="answer-footer">
-                  <span>Your answer is only used to create this feedback.</span>
-                  {answer && <button onClick={() => setAnswer("")}><X size={15} /> Clear</button>}
-                </div>
-              </div>
-              {error && <p className="error-message">{error}</p>}
-              <button
-                className="submit-answer"
-                onClick={onSubmit}
-                disabled={isLoading || !answer.trim()}
-              >
-                {isLoading ? <><LoaderCircle className="spin" size={18} /> Reviewing your answer…</> : <>Get my feedback <ArrowRight size={18} /></>}
-              </button>
-            </>
-          ) : (
-            <Feedback feedback={feedback} onNext={onNext} questionNumber={questionNumber} total={session.total_questions} />
-          )}
-        </section>
+        <SessionPreview setup={setup} target={target} />
       </div>
     </main>
   );
 }
 
-function Feedback({ feedback, onNext, questionNumber, total }) {
-  const scoreItems = [
-    ["Clarity", feedback.scores.clarity],
-    ["Depth", feedback.scores.depth],
-    ["Relevance", feedback.scores.relevance],
-    ["Structure", feedback.scores.structure],
-  ];
-
-  return (
-    <div className="feedback-wrap">
-      <div className="feedback-header">
-        <div className="score-ring" style={{ "--score": feedback.overall_score }}>
-          <strong>{feedback.overall_score}</strong><span>/100</span>
-        </div>
-        <div><span className="feedback-kicker">Your coaching notes</span><h2>A strong answer with room to sharpen.</h2></div>
-      </div>
-      <p className="feedback-summary">{feedback.summary}</p>
-      <div className="score-grid">
-        {scoreItems.map(([label, value]) => (
-          <div key={label}><span>{label}<strong>{value}</strong></span><i><b style={{ width: `${value}%` }} /></i></div>
-        ))}
-      </div>
-      <FeedbackList title="What worked" icon={CircleCheck} items={feedback.strengths} positive />
-      <FeedbackList title="Make it stronger" icon={Target} items={feedback.improvements} />
-      <details className="example-answer">
-        <summary><span><Sparkles size={17} /> See a stronger version</span><ChevronDown size={18} /></summary>
-        <p>{feedback.better_answer}</p>
-      </details>
-      <button className="submit-answer" onClick={onNext}>
-        {questionNumber >= total ? "See session report" : "Next question"} <ArrowRight size={18} />
-      </button>
-    </div>
-  );
+function RoleStep({ setup, update }) {
+  return <div className="builder-content"><span className="section-number">01 / ROLE</span><h2>What role are you pursuing?</h2><p>Choose the closest match. You can sharpen it with a real job description next.</p><div className="role-grid">{Object.entries(ROLE_META).map(([name, meta]) => { const Icon = meta.icon; return <button key={name} className={`role-choice ${setup.role_title === name ? "selected" : ""}`} onClick={() => update("role_title", name)}><span className={meta.tone}><Icon size={20} /></span><div><strong>{name}</strong><small>{meta.blurb}</small></div>{setup.role_title === name && <CircleCheck size={19} />}</button>; })}</div><div className="field-row"><label>Target company<input value={setup.company} onChange={(event) => update("company", event.target.value)} placeholder="e.g. Stripe, Google, a Series B startup" /></label><label>Seniority<select value={setup.seniority} onChange={(event) => update("seniority", event.target.value)}><option>Entry-level</option><option>Mid-level</option><option>Senior</option><option>Staff / Lead</option><option>Manager</option></select></label></div></div>;
 }
 
-function FeedbackList({ title, icon, items, positive = false }) {
-  return (
-    <div className={`feedback-list ${positive ? "positive" : ""}`}>
-      <h3>{createElement(icon, { size: 18 })} {title}</h3>
-      {items.map((item) => <p key={item}><span>{positive ? "✓" : "→"}</span>{item}</p>)}
-    </div>
-  );
+function TargetStep({ setup, update }) {
+  const loadFile = (key, file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => update(key, String(reader.result));
+    reader.readAsText(file);
+  };
+  return <div className="builder-content"><span className="section-number">02 / INTELLIGENCE</span><h2>Make it specific to the opportunity.</h2><p>Paste the source material. Everything stays on this machine unless you connect an AI provider.</p><div className="document-grid"><label className="document-field"><span><FileText size={18} /> Resume or experience notes <em>{setup.resume_text.length ? `${setup.resume_text.length} characters` : "Optional"}</em></span><textarea value={setup.resume_text} onChange={(event) => update("resume_text", event.target.value)} placeholder="Paste your resume, key projects, or experience highlights…" /><input type="file" accept=".txt,.md" onChange={(event) => loadFile("resume_text", event.target.files[0])} /><b><Upload size={14} /> Import .txt or .md</b></label><label className="document-field"><span><BriefcaseBusiness size={18} /> Job description <em>{setup.job_description.length ? `${setup.job_description.length} characters` : "Recommended"}</em></span><textarea value={setup.job_description} onChange={(event) => update("job_description", event.target.value)} placeholder="Paste responsibilities, requirements, and company context…" /><input type="file" accept=".txt,.md" onChange={(event) => loadFile("job_description", event.target.files[0])} /><b><Upload size={14} /> Import .txt or .md</b></label></div><div className="privacy-strip"><CircleCheck size={17} /><div><strong>Local-first by design</strong><span>Your material is stored in the local SQLite database and is never required for the app to work.</span></div></div></div>;
 }
 
-function Results({ role, history, onRestart }) {
-  const average = useMemo(
-    () => Math.round(history.reduce((sum, item) => sum + item.score, 0) / history.length),
-    [history],
-  );
-
-  return (
-    <main className="results-page">
-      <div className="results-hero">
-        <span className="complete-icon"><Check size={30} /></span>
-        <span className="section-kicker">Session complete</span>
-        <h1>You’re more ready than when you started.</h1>
-        <p>You worked through {history.length} {role.title} questions and built a clearer picture of your strongest stories.</p>
-      </div>
-      <section className="results-card">
-        <div className="results-score">
-          <span>Session score</span><strong>{average}</strong><small>Strong foundation</small>
-        </div>
-        <div className="results-stat"><span>Strongest area</span><strong>Clarity</strong><p>Your examples were easy to follow.</p></div>
-        <div className="results-stat"><span>Focus next</span><strong>Measurable impact</strong><p>Bring more outcomes into your closing.</p></div>
-      </section>
-      <section className="answer-review">
-        <div className="section-heading"><div><span className="section-kicker">Your answers</span><h2>Review the session</h2></div></div>
-        {history.map((item, index) => (
-          <details key={item.question} open={index === 0}>
-            <summary><span><b>0{index + 1}</b>{item.question}</span><strong>{item.score}</strong></summary>
-            <p>{item.feedback.summary}</p>
-          </details>
-        ))}
-      </section>
-      <button className="start-session" onClick={onRestart}><RotateCcw size={18} /> Practice another role</button>
-    </main>
-  );
+function StyleStep({ setup, update }) {
+  return <div className="builder-content"><span className="section-number">03 / FORMAT</span><h2>Choose the pressure and pace.</h2><p>Build a realistic simulation or isolate one skill for deliberate practice.</p><div className="mode-grid">{MODES.map((mode) => { const Icon = mode.icon; return <button key={mode.name} className={setup.mode === mode.name ? "selected" : ""} onClick={() => update("mode", mode.name)}><Icon size={20} /><strong>{mode.name}</strong><span>{mode.description}</span>{setup.mode === mode.name && <Check size={15} />}</button>; })}</div><div className="field-row three"><label>Difficulty<select value={setup.difficulty} onChange={(event) => update("difficulty", event.target.value)}><option>Supportive</option><option>Adaptive</option><option>Challenging</option></select></label><label>Interviewer<select value={setup.interviewer_style} onChange={(event) => update("interviewer_style", event.target.value)}><option>Balanced</option><option>Friendly coach</option><option>Strict recruiter</option><option>Executive panel</option></select></label><label>Questions<select value={setup.total_questions} onChange={(event) => update("total_questions", Number(event.target.value))}><option value={3}>3 questions</option><option value={5}>5 questions</option><option value={6}>6 questions</option><option value={8}>8 questions</option></select></label></div></div>;
 }
+
+function SessionPreview({ setup, target }) {
+  const meta = ROLE_META[setup.role_title]; const Icon = meta.icon;
+  const analysis = target?.analysis;
+  return <aside className="preview-card"><span className="preview-kicker">Session preview</span><div className={`preview-icon ${meta.tone}`}><Icon /></div><h3>{setup.role_title}</h3><p>{setup.company || "Open company practice"} · {setup.seniority}</p><div className="preview-list"><span><BrainCircuit />{setup.mode}</span><span><Gauge />{setup.difficulty} difficulty</span><span><MessageSquareText />{setup.total_questions} questions</span><span><Headphones />Voice and text enabled</span></div>{analysis ? <div className="match-card"><strong>{analysis.match_score}% match</strong><p>{analysis.positioning}</p></div> : <div className="preview-note"><WandSparkles size={17} /><p>Add a resume and job description to unlock opportunity-specific questions and gap analysis.</p></div>}</aside>;
+}
+
+function Studio({ session, setSession, setup, history, setHistory, onFinish }) {
+  const [answer, setAnswer] = useState("");
+  const [feedback, setFeedback] = useState(null);
+  const [delivery, setDelivery] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [seconds, setSeconds] = useState(0);
+  const [error, setError] = useState("");
+  const recognitionRef = useRef(null);
+  const timerRef = useRef(null);
+  const number = history.length + 1;
+
+  useEffect(() => () => { recognitionRef.current?.stop(); clearInterval(timerRef.current); }, []);
+  const toggleVoice = () => {
+    if (listening) { recognitionRef.current?.stop(); clearInterval(timerRef.current); setListening(false); return; }
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) { setError("Voice input requires Chrome or Edge. Typing remains available."); return; }
+    const recognition = new Recognition(); let committed = answer;
+    recognition.continuous = true; recognition.interimResults = true;
+    recognition.onresult = (event) => { let interim = ""; for (let i = event.resultIndex; i < event.results.length; i += 1) { const text = event.results[i][0].transcript; if (event.results[i].isFinal) committed += `${committed ? " " : ""}${text}`; else interim += text; } setAnswer(`${committed}${interim ? ` ${interim}` : ""}`); };
+    recognition.onend = () => { setListening(false); clearInterval(timerRef.current); };
+    recognition.onerror = () => setError("The microphone stopped. Your transcript is still here.");
+    recognition.start(); recognitionRef.current = recognition; setListening(true); setError("");
+    timerRef.current = setInterval(() => setSeconds((value) => value + 1), 1000);
+  };
+  const submit = async () => {
+    if (answer.trim().length < 30) { setError("Develop the answer a little further before requesting feedback."); return; }
+    recognitionRef.current?.stop(); clearInterval(timerRef.current); setLoading(true); setError("");
+    try {
+      const data = await api(`/sessions/${session.session_id}/answers`, { method: "POST", body: JSON.stringify({ question: session.question, answer, question_number: number, duration_seconds: seconds }) });
+      setFeedback(data.feedback); setDelivery(data.delivery);
+      setSession((current) => ({ ...current, next_question: data.next_question, next_question_type: data.next_question_type, completed: data.completed }));
+    } catch { setFeedback(SAMPLE_FEEDBACK); setDelivery({ word_count: answer.split(/\s+/).length, words_per_minute: 128, filler_count: 1, pace_label: "Measured", concision_score: 82 }); }
+    finally { setLoading(false); }
+  };
+  const next = () => {
+    const nextHistory = [...history, { question: session.question, answer, feedback, delivery }];
+    setHistory(nextHistory);
+    if (session.completed || nextHistory.length >= session.total_questions) { onFinish(); return; }
+    setSession((current) => ({ ...current, question: current.next_question, question_type: current.next_question_type }));
+    setAnswer(""); setFeedback(null); setDelivery(null); setSeconds(0); window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  return <main className="studio-page"><div className="studio-progress"><span style={{ width: `${(number / session.total_questions) * 100}%` }} /></div><div className="studio-bar"><div><span className="live-dot" /> Live practice</div><strong>{setup.role_title}</strong><span>Question {number} of {session.total_questions}</span></div><div className="studio-layout"><section className="interviewer"><div className="interviewer-meta"><span className="interviewer-avatar">AI</span><div><strong>{setup.interviewer_style} interviewer</strong><small>{session.question_type} · {setup.difficulty}</small></div></div><div className="question-block"><span>Question {String(number).padStart(2, "0")}</span><h1>{session.question}</h1><button onClick={() => { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(session.question)); }}><Volume2 size={16} /> Listen to question</button></div><div className="studio-tip"><Lightbulb size={18} /><div><strong>Think before you fill the silence.</strong><p>A two-second pause sounds more confident than a rushed opening. Lead with your answer, then support it.</p></div></div></section><section className="response-workspace">{feedback ? <Feedback feedback={feedback} delivery={delivery} onNext={next} final={number >= session.total_questions} /> : <><div className="response-head"><div><span>Your response</span><small>{answer.trim() ? answer.trim().split(/\s+/).length : 0} words · {formatTime(seconds)}</small></div><button className={listening ? "recording" : ""} onClick={toggleVoice}>{listening ? <Square size={14} fill="currentColor" /> : <Mic size={16} />}{listening ? "Stop" : "Answer with voice"}</button></div><div className={`transcript ${listening ? "listening" : ""}`}>{listening && <div className="listening-strip"><span />Listening to your answer<div className="wave"><i /><i /><i /><i /><i /></div></div>}<textarea value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Take a breath, then begin. Your transcript will appear here…" /><div className="transcript-foot"><span><Activity size={14} /> Live delivery analysis</span>{answer && <button onClick={() => setAnswer("")}><X size={14} /> Clear</button>}</div></div>{error && <p className="form-error">{error}</p>}<div className="live-signals"><Signal label="Pace" value={listening ? "Listening…" : "Ready"} /><Signal label="Answer length" value={answer.split(/\s+/).filter(Boolean).length < 60 ? "Developing" : "Strong"} /><Signal label="Privacy" value="Local session" /></div><button className="primary submit-response" disabled={loading || !answer.trim()} onClick={submit}>{loading ? <><LoaderCircle className="spin" /> Analyzing five dimensions…</> : <>Analyze my answer <ArrowRight size={17} /></>}</button></>}</section></div></main>;
+}
+
+function Signal({ label, value }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
+function formatTime(seconds) { return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`; }
+
+function Feedback({ feedback, delivery, onNext, final }) {
+  const scores = Object.entries(feedback.scores || {});
+  return <div className="feedback"><div className="feedback-hero"><div className="score-dial" style={{ "--score": feedback.overall_score }}><strong>{feedback.overall_score}</strong><span>overall</span></div><div><span className="eyebrow">Coaching analysis</span><h2>{feedback.overall_score >= 85 ? "A compelling, interview-ready answer." : feedback.overall_score >= 72 ? "Strong foundation. Sharpen the proof." : "Good raw material. Build the structure."}</h2><p>{feedback.summary}</p></div></div><div className="dimension-grid">{scores.map(([name, value]) => <div key={name}><span>{name}<strong>{value}</strong></span><i><b style={{ width: `${value}%` }} /></i></div>)}</div>{delivery && <div className="delivery-row"><Delivery icon={Gauge} label="Speaking pace" value={`${delivery.words_per_minute} wpm`} note={delivery.pace_label} /><Delivery icon={Pause} label="Filler words" value={delivery.filler_count} note={delivery.filler_count <= 2 ? "Controlled" : "Reduce"} /><Delivery icon={MessageSquareText} label="Answer length" value={delivery.word_count} note="words" /><Delivery icon={Zap} label="Concision" value={`${delivery.concision_score}%`} note="focus" /></div>}<div className="coaching-columns"><FeedbackList positive title="Signals that landed" items={feedback.strengths} /><FeedbackList title="Highest-value improvements" items={feedback.improvements} /></div><details className="stronger-answer"><summary><span><WandSparkles size={17} /> Coach’s stronger-answer blueprint</span><ChevronRight size={17} /></summary><p>{feedback.better_answer}</p></details><button className="primary submit-response" onClick={onNext}>{final ? "Open full performance report" : "Continue to next question"} <ArrowRight size={17} /></button></div>;
+}
+function Delivery({ icon, label, value, note }) { return <div>{createElement(icon, { size: 16 })}<span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
+function FeedbackList({ title, items, positive = false }) { return <div className={`feedback-list ${positive ? "positive" : ""}`}><h3>{positive ? <CircleCheck size={18} /> : <Target size={18} />}{title}</h3>{items.map((item) => <p key={item}><span>{positive ? "✓" : "→"}</span>{item}</p>)}</div>; }
+
+function Report({ report, onNew }) {
+  const { session, answers, averages } = report;
+  const download = () => window.open(`/api/sessions/${session.id}/export`, "_blank");
+  return <main className="page report-page"><section className="report-heading"><div><span className="eyebrow">Session complete · {session.role_title}</span><h1>Your performance,<br />made actionable.</h1><p>You completed {answers.length} questions. Here is the evidence, not just a score.</p></div><div className="report-actions"><button className="secondary" onClick={download}><Download size={16} /> Export report</button><button className="primary" onClick={onNew}><RotateCcw size={16} /> Practice again</button></div></section><section className="report-summary"><div className="report-score"><span>Overall performance</span><strong>{report.overall_score}</strong><small>/ 100</small><p>{report.overall_score >= 80 ? "Interview ready" : "Promising foundation"}</p></div><div className="radar-wrap"><Radar scores={averages} /></div><div className="report-insights"><div><span className="success"><TrendingUp /></span><p>Strongest competency<strong>{report.top_strength}</strong></p></div><div><span className="focus"><Target /></span><p>Priority improvement<strong>{report.focus_area}</strong></p></div><div><span><MessageSquareText /></span><p>Answers analyzed<strong>{answers.length} complete</strong></p></div></div></section><section className="report-grid"><div className="panel"><PanelHead kicker="Competencies" title="How your answers performed" />{Object.entries(averages).map(([name, value]) => <div className="report-bar" key={name}><span>{name}<strong>{value}</strong></span><i><b style={{ width: `${value}%` }} /></i></div>)}</div><div className="panel action-plan"><PanelHead kicker="Next seven days" title="Your practice plan" />{report.recommendations.map((item, index) => <div key={item}><span>0{index + 1}</span><p>{item}</p></div>)}</div></section><section className="answer-review"><PanelHead kicker="Answer evidence" title="Question-by-question review" action={`${answers.length} responses`} />{answers.map((item) => <details key={item.question_number}><summary><span><b>0{item.question_number}</b><div><small>{item.feedback.overall_score}/100</small><strong>{item.question}</strong></div></span><ChevronRight /></summary><div className="review-body"><div><h4>Your answer</h4><p>{item.answer}</p></div><div><h4>Coach’s read</h4><p>{item.feedback.summary}</p><ul>{item.feedback.improvements.map((point) => <li key={point}>{point}</li>)}</ul></div></div></details>)}</section></main>;
+}
+
+function Radar({ scores }) {
+  const labels = ["clarity", "depth", "relevance", "structure", "delivery"];
+  const angles = labels.map((_, index) => -Math.PI / 2 + (index * Math.PI * 2) / labels.length);
+  const point = (value, angle) => `${50 + Math.cos(angle) * value * .4},${50 + Math.sin(angle) * value * .4}`;
+  const polygon = labels.map((label, index) => point(scores[label] || 0, angles[index])).join(" ");
+  return <svg className="radar" viewBox="0 0 100 100">{[20, 40, 60, 80, 100].map((level) => <polygon key={level} points={angles.map((angle) => point(level, angle)).join(" ")} />)}{angles.map((angle, index) => <line key={index} x1="50" y1="50" x2={50 + Math.cos(angle) * 40} y2={50 + Math.sin(angle) * 40} />)}<polygon className="radar-score" points={polygon} />{labels.map((label, index) => <text key={label} x={50 + Math.cos(angles[index]) * 48} y={50 + Math.sin(angles[index]) * 46}>{label.slice(0, 3).toUpperCase()}</text>)}</svg>;
+}
+
+function HistoryPage({ data, onOpen, onNew }) { return <main className="page history-page"><div className="page-title"><div><span className="eyebrow">Practice archive</span><h1>Every session is<br />part of the evidence.</h1><p>Review your strongest answers, revisit feedback, and track the quality of your preparation over time.</p></div><button className="primary" onClick={onNew}><Plus size={16} /> New interview</button></div>{data.sessions?.length ? <SessionTable sessions={data.sessions} onOpen={onOpen} /> : <EmptySessions onNew={onNew} />}</main>; }
+function SessionTable({ sessions, onOpen }) { return <div className="session-table"><div className="table-head"><span>Interview</span><span>Format</span><span>Progress</span><span>Score</span><span /></div>{sessions.map((session) => <button key={session.id} onClick={() => onOpen(session.id)}><span className="session-role"><i>{session.role_title.slice(0, 2).toUpperCase()}</i><div><strong>{session.role_title}</strong><small>{new Date(session.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</small></div></span><span>{session.mode}</span><span>{session.answer_count} / {session.total_questions} answers</span><span><b className={session.score >= 80 ? "high" : ""}>{session.score || "—"}</b></span><span><ChevronRight size={17} /></span></button>)}</div>; }
+function EmptySessions({ onNew }) { return <div className="empty-state"><span><Mic /></span><h3>Your first interview starts here.</h3><p>Choose a role and create a meaningful performance baseline.</p><button className="primary" onClick={onNew}>Build an interview</button></div>; }
 
 export default App;

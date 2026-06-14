@@ -1,26 +1,45 @@
-# Bravely — AI Interview Coach
+# Bravely - AI Interview Intelligence
 
-A polished interview practice app with role-specific questions, voice input,
-session progress, and detailed AI feedback.
+Bravely is a local-first interview coaching workspace. It creates targeted
+mock interviews, accepts voice or typed answers, analyzes answer quality and
+delivery, adapts follow-up questions, and saves detailed performance reports.
+
+The complete product works without an API key. Optionally, connect a free local
+Ollama model or Claude for deeper language-model feedback.
+
+## Product capabilities
+
+- Professional command-center dashboard with progress trends
+- Product, engineering, marketing, and UX interview tracks
+- Resume and job-description targeting
+- Keyword match, skill-gap, positioning, and likely-question analysis
+- Full interview, behavioral drill, role deep-dive, and rapid-fire modes
+- Supportive, adaptive, and challenging difficulty levels
+- Browser voice transcription and spoken interview questions
+- Adaptive follow-ups when an answer lacks ownership, evidence, or outcomes
+- Scoring for clarity, depth, relevance, structure, and delivery
+- Speaking pace, filler-word, length, and concision analytics
+- STAR component analysis and stronger-answer coaching
+- Persistent SQLite sessions, answers, targets, scores, and history
+- Radar reports, competency trends, answer review, and Markdown export
+- Responsive desktop and mobile design
 
 ## Run locally
 
+Install dependencies:
+
 ```powershell
 npm install
-pip install -r backend/requirements.txt
-Copy-Item .env.example .env
+python -m pip install -r backend/requirements.txt
 ```
-
-Add an Anthropic API key to `.env` for live Claude feedback. Without a key, the
-app uses its built-in demo evaluator and remains fully usable.
 
 Start the API:
 
 ```powershell
-uvicorn backend.main:app --reload
+python -m uvicorn backend.main:app --reload
 ```
 
-In a second terminal, start the React app:
+Start the React application in a second terminal:
 
 ```powershell
 npm run dev
@@ -28,12 +47,50 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-## Features
+## Free local AI with Ollama
 
-- Four role-specific interview tracks
-- Six-question guided sessions
-- Browser speech-to-text and spoken questions
-- Feedback across clarity, depth, relevance, and structure
-- Specific strengths, improvements, and a stronger-answer example
-- End-of-session score and answer review
-- Responsive mobile and desktop layouts
+Bravely does not require Ollama, but it can use it for richer adaptive feedback.
+
+1. Install Ollama from `https://ollama.com`.
+2. Download a model:
+
+```powershell
+ollama pull qwen2.5:7b
+```
+
+3. Create `.env`:
+
+```env
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:7b
+DATABASE_PATH=backend/coach.db
+```
+
+Restart the API. The provider indicator in the sidebar will show `ollama
+connected`.
+
+## Docker
+
+```powershell
+docker compose up --build
+```
+
+Open `http://localhost:8080`. Interview data is persisted in the
+`coach-data` Docker volume.
+
+## Architecture
+
+- `React 19` and `Vite 8` for the application interface
+- `FastAPI` for targeting, coaching, analytics, reports, and exports
+- `SQLite` for durable local persistence
+- `Web Speech API` for browser speech-to-text
+- Built-in deterministic coaching engine for no-key operation
+- Optional Ollama and Anthropic provider adapters
+
+## Verification
+
+```powershell
+npm run lint
+npm run build
+python -m compileall backend
+```
