@@ -230,7 +230,68 @@ def delivery_metrics(answer: str, duration_seconds: int, confidence: float) -> d
     }
 
 
-def local_feedback(answer: str, delivery: dict[str, Any], role_title: str, target: dict[str, Any] | None) -> dict[str, Any]:
+def build_model_answer(question: str, role_title: str, target: dict[str, Any] | None) -> str:
+    focus = target.get("focus_areas", [])[0] if target and target.get("focus_areas") else None
+    lowered = question.lower()
+
+    if role_title == "Software Engineer":
+        if "design" in lowered or "system" in lowered:
+            answer = (
+                "I would start by clarifying scale, delivery guarantees, latency targets, and failure modes. "
+                "I would separate ingestion from delivery with a durable queue, keep notification preferences "
+                "and templates in dedicated services, and make workers idempotent so retries are safe. I would "
+                "partition by recipient, apply provider-specific rate limits, and use exponential backoff with a "
+                "dead-letter queue. I would measure queue age, delivery success, duplicate rate, and provider "
+                "latency. I would begin with the simplest architecture that meets current volume, then add "
+                "regional redundancy and partitioning when the evidence justifies it."
+            )
+        else:
+            answer = (
+                "Our checkout API was breaching its latency target during peak traffic, which was causing failed "
+                "orders. I owned the diagnosis and rollout. Tracing showed that repeated inventory calls were the "
+                "main bottleneck, so I introduced request coalescing, added a short-lived cache, and shipped the "
+                "change behind a feature flag with rollback thresholds. Over six weeks, p95 latency fell from "
+                "1.8 seconds to 620 milliseconds and checkout failures dropped 28%. The key lesson was to define "
+                "the operational success and rollback metrics before changing the architecture."
+            )
+    elif role_title == "Marketing Manager":
+        answer = (
+            "A product-launch campaign was generating traffic but trial conversion was 35% below target. I led a "
+            "funnel review and found that our broad message was attracting low-intent visitors. I worked with "
+            "customer research and sales to segment the audience, rewrote the landing page around the highest-value "
+            "use case, and shifted budget toward two channels with stronger activation. Within four weeks, "
+            "trial-to-qualified-lead conversion increased 22% while cost per qualified lead fell 16%. I learned to "
+            "optimize for the downstream business event, not the most visible top-of-funnel metric."
+        )
+    elif role_title == "UX Designer":
+        answer = (
+            "Research showed that new administrators were abandoning setup because our workflow reflected the "
+            "internal data model rather than their mental model. I owned the redesign and aligned product and "
+            "engineering around task completion as the primary measure. I mapped the critical journey, tested "
+            "three prototypes with eight users, and simplified the flow from seven decisions to four guided steps. "
+            "After launch, setup completion increased 19% and median completion time fell by three minutes. The "
+            "project reinforced that a strong design rationale connects observed behavior, constraints, and a "
+            "measurable user outcome."
+        )
+    else:
+        answer = (
+            "Activation had plateaued, but the team had competing explanations and limited evidence. I led a "
+            "two-week discovery sprint to make the decision explicit. We combined funnel analysis with twelve "
+            "customer interviews and learned that users understood the product value but were not reaching the "
+            "first meaningful outcome quickly enough. I prioritized a guided onboarding experiment over three "
+            "larger roadmap requests, aligned sales and engineering on the success metric, and launched it to a "
+            "controlled cohort. Activation increased 14% and time-to-value fell 21%. The decision taught me to "
+            "frame uncertainty as a testable risk and agree on the evidence before debating solutions."
+        )
+
+    if focus:
+        answer += f" For a role emphasizing {focus}, I would also make that capability explicit in the discussion."
+    return answer
+
+
+def local_feedback(
+    question: str, answer: str, delivery: dict[str, Any], role_title: str, target: dict[str, Any] | None
+) -> dict[str, Any]:
     lowered = answer.lower()
     word_count = delivery["word_count"]
     action_hits = sum(1 for word in ACTION_WORDS if re.search(rf"\b{word}\b", lowered))
@@ -273,6 +334,17 @@ def local_feedback(answer: str, delivery: dict[str, Any], role_title: str, targe
     if target and target.get("focus_areas"):
         target_note = f" For this target, connect the story more directly to {target['focus_areas'][0]}."
 
+    comparison_gaps = []
+    if not ownership:
+        comparison_gaps.append("Ownership: the model answer names the exact decision and actions the candidate owned.")
+    if not has_metric:
+        comparison_gaps.append("Evidence: the model answer proves impact with a baseline and measurable result.")
+    if not result_hits:
+        comparison_gaps.append("Closure: the model answer ends with the outcome and a transferable lesson.")
+    if word_count < 70:
+        comparison_gaps.append("Depth: the model answer includes a decision, trade-off, and implementation detail.")
+    comparison_gaps.append("Structure: the model answer leads with a clear narrative and removes nonessential context.")
+
     return {
         "overall_score": overall,
         "summary": (
@@ -290,6 +362,8 @@ def local_feedback(answer: str, delivery: dict[str, Any], role_title: str, targe
             "personally owned, and explain the two most important actions and the trade-off behind "
             "them. Close with a measurable result and the lesson you carried into your next project."
         ),
+        "model_answer": build_model_answer(question, role_title, target),
+        "comparison_gaps": comparison_gaps[:4],
         "star": {
             "situation": 82 if situation else 58,
             "task": 84 if ownership else 62,
@@ -429,11 +503,14 @@ async def evaluate_answer(session_id: str, request: AnswerRequest) -> dict[str, 
         target = get_target(connection, session["target_id"])
 
     delivery = delivery_metrics(request.answer, request.duration_seconds, request.confidence)
-    feedback = local_feedback(request.answer, delivery, session["role_title"], target)
+    feedback = local_feedback(request.question, request.answer, delivery, session["role_title"], target)
     system = (
         "You are a rigorous executive interview coach. Return JSON only. Preserve keys overall_score, "
         "summary, scores (clarity, depth, relevance, structure, delivery), strengths, improvements, "
-        "better_answer, and star (situation, task, action, result). Scores are integers from 0 to 100."
+        "better_answer, model_answer, comparison_gaps, and star (situation, task, action, result). "
+        "The model_answer must answer the exact interview question with a realistic, concise, excellent "
+        "example for this role. comparison_gaps must contain 3 or 4 specific strings contrasting the "
+        "candidate response with the model answer. Scores are integers from 0 to 100."
     )
     prompt = json.dumps({
         "role": session["role_title"], "mode": session["mode"], "style": session["interviewer_style"],

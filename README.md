@@ -18,6 +18,8 @@ Ollama model or Claude for deeper language-model feedback.
 - Browser voice transcription and spoken interview questions
 - Adaptive follow-ups when an answer lacks ownership, evidence, or outcomes
 - Scoring for clarity, depth, relevance, structure, and delivery
+- Instant exact-question model answers with side-by-side comparison
+- Specific gap analysis showing what separates the response from a 10/10 example
 - Speaking pace, filler-word, length, and concision analytics
 - STAR component analysis and stronger-answer coaching
 - Persistent SQLite sessions, answers, targets, scores, and history
