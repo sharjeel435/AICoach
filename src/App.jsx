@@ -142,7 +142,7 @@ function Sidebar({ page, setPage, provider, onNew }) {
   ];
   return (
     <aside className="sidebar">
-      <button className="brand" onClick={() => setPage("dashboard")}><span><Sparkles size={17} /></span>AICoachy</button>
+      <button className="brand" onClick={() => setPage("dashboard")}><span><Sparkles size={17} /></span><b>AICoachy</b></button>
       <nav>
         <p>Workspace</p>
         {links.map(([id, icon, label]) => (
@@ -158,7 +158,7 @@ function Sidebar({ page, setPage, provider, onNew }) {
         <span className={`provider-dot ${provider}`} />
         <div><strong>{provider === "local" ? "Local intelligence" : `${provider} connected`}</strong><small>{provider === "local" ? "Private, no API key" : "Enhanced AI coaching"}</small></div>
       </div>
-      <div className="profile-chip"><span>SS</span><div><strong>Sharjeel</strong><small>Interview workspace</small></div><Settings2 size={16} /></div>
+      <div className="profile-chip"><span>SS</span><div><strong>Sharjeel</strong><small>Personal workspace</small></div><Settings2 size={16} /></div>
     </aside>
   );
 }
@@ -167,7 +167,7 @@ function Topbar({ page, onNew }) {
   const titles = { dashboard: "Interview command center", setup: "Build your interview", studio: "Live interview studio", history: "Session history", report: "Performance report" };
   return (
     <header className="topbar">
-      <div><span className="mobile-menu"><Menu size={20} /></span><strong>{titles[page]}</strong></div>
+      <div className="topbar-title"><span className="mobile-menu"><Menu size={20} /></span><div><small>AICoachy workspace</small><strong>{titles[page]}</strong></div></div>
       <button className="topbar-cta" onClick={onNew}><Plus size={16} /> New interview</button>
     </header>
   );
@@ -179,10 +179,10 @@ function Dashboard({ data, onNew, onOpen }) {
   return (
     <main className="page dashboard-page">
       <section className="welcome">
-        <div><span className="eyebrow">Sunday practice brief</span><h1>Build the answer<br />before the pressure.</h1><p>Target the role, practice out loud, and turn every response into evidence of how you think.</p><button className="primary" onClick={onNew}>Start a targeted interview <ArrowRight size={17} /></button></div>
+        <div><span className="eyebrow">Interview preparation platform</span><h1>Prepare with purpose.<br />Perform with confidence.</h1><p>Run role-specific mock interviews, analyze every response, and build a measurable record of your progress.</p><button className="primary" onClick={onNew}>Create interview <ArrowRight size={17} /></button></div>
         <div className="readiness-card">
           <div className="readiness-top"><span>Interview readiness</span><strong>{stats.average_score || 0}<small>/100</small></strong></div>
-          <div className="readiness-ring" style={{ "--value": stats.average_score || 0 }}><div><BrainCircuit /><strong>{stats.total_sessions ? "Developing" : "Start here"}</strong><span>{stats.questions_answered || 0} answers analyzed</span></div></div>
+          <div className="readiness-ring" style={{ "--value": stats.average_score || 0 }}><div><BrainCircuit /><strong>{stats.total_sessions ? "In progress" : "No baseline"}</strong><span>{stats.questions_answered || 0} answers analyzed</span></div></div>
           <div className="readiness-foot"><span><i className="green" />Clarity</span><span><i className="amber" />Impact</span><span><i />Delivery</span></div>
         </div>
       </section>
@@ -226,7 +226,7 @@ function PanelHead({ kicker, title, action }) {
 function TrendChart({ values }) {
   const points = values.length ? values : [42, 52, 49, 63, 67, 72, 76, 81];
   const coords = points.map((value, index) => `${(index / Math.max(points.length - 1, 1)) * 100},${100 - value}`).join(" ");
-  return <div className="trend-chart"><div className="grid-lines"><i /><i /><i /><i /></div><svg viewBox="0 0 100 100" preserveAspectRatio="none"><defs><linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#df7358" stopOpacity=".26" /><stop offset="100%" stopColor="#df7358" stopOpacity="0" /></linearGradient></defs><polygon points={`0,100 ${coords} 100,100`} fill="url(#chartFill)" /><polyline points={coords} fill="none" stroke="#df7358" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg></div>;
+  return <div className="trend-chart"><div className="grid-lines"><i /><i /><i /><i /></div><svg viewBox="0 0 100 100" preserveAspectRatio="none"><defs><linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2563eb" stopOpacity=".22" /><stop offset="100%" stopColor="#2563eb" stopOpacity="0" /></linearGradient></defs><polygon points={`0,100 ${coords} 100,100`} fill="url(#chartFill)" /><polyline points={coords} fill="none" stroke="#2563eb" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg></div>;
 }
 
 function Setup({ setup, setSetup, target, setTarget, onStart, loading }) {
@@ -234,7 +234,7 @@ function Setup({ setup, setSetup, target, setTarget, onStart, loading }) {
   const update = (key, value) => { setSetup((current) => ({ ...current, [key]: value })); setTarget(null); };
   return (
     <main className="page setup-page">
-      <div className="setup-header"><span className="eyebrow">Interview builder</span><h1>Design a practice session<br />for the exact opportunity.</h1><p>Add the real context now, and every question becomes more useful.</p></div>
+      <div className="setup-header"><span className="eyebrow">Interview setup</span><h1>Configure a focused practice session.</h1><p>Choose a role, add opportunity context, and set the interview format.</p></div>
       <div className="stepper">{["Target role", "Job intelligence", "Interview style"].map((label, index) => <button key={label} className={step === index + 1 ? "active" : step > index + 1 ? "done" : ""} onClick={() => setStep(index + 1)}><span>{step > index + 1 ? <Check size={14} /> : index + 1}</span><div><small>Step 0{index + 1}</small><strong>{label}</strong></div></button>)}</div>
       <div className="builder-layout">
         <section className="builder-panel">
@@ -345,7 +345,7 @@ function Radar({ scores }) {
   return <svg className="radar" viewBox="0 0 100 100">{[20, 40, 60, 80, 100].map((level) => <polygon key={level} points={angles.map((angle) => point(level, angle)).join(" ")} />)}{angles.map((angle, index) => <line key={index} x1="50" y1="50" x2={50 + Math.cos(angle) * 40} y2={50 + Math.sin(angle) * 40} />)}<polygon className="radar-score" points={polygon} />{labels.map((label, index) => <text key={label} x={50 + Math.cos(angles[index]) * 48} y={50 + Math.sin(angles[index]) * 46}>{label.slice(0, 3).toUpperCase()}</text>)}</svg>;
 }
 
-function HistoryPage({ data, onOpen, onNew }) { return <main className="page history-page"><div className="page-title"><div><span className="eyebrow">Practice archive</span><h1>Every session is<br />part of the evidence.</h1><p>Review your strongest answers, revisit feedback, and track the quality of your preparation over time.</p></div><button className="primary" onClick={onNew}><Plus size={16} /> New interview</button></div>{data.sessions?.length ? <SessionTable sessions={data.sessions} onOpen={onOpen} /> : <EmptySessions onNew={onNew} />}</main>; }
+function HistoryPage({ data, onOpen, onNew }) { return <main className="page history-page"><div className="page-title"><div><span className="eyebrow">Practice history</span><h1>Review your interview sessions.</h1><p>Revisit feedback, compare scores, and track the quality of your preparation over time.</p></div><button className="primary" onClick={onNew}><Plus size={16} /> New interview</button></div>{data.sessions?.length ? <SessionTable sessions={data.sessions} onOpen={onOpen} /> : <EmptySessions onNew={onNew} />}</main>; }
 function SessionTable({ sessions, onOpen }) { return <div className="session-table"><div className="table-head"><span>Interview</span><span>Format</span><span>Progress</span><span>Score</span><span /></div>{sessions.map((session) => <button key={session.id} onClick={() => onOpen(session.id)}><span className="session-role"><i>{session.role_title.slice(0, 2).toUpperCase()}</i><div><strong>{session.role_title}</strong><small>{new Date(session.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</small></div></span><span>{session.mode}</span><span>{session.answer_count} / {session.total_questions} answers</span><span><b className={session.score >= 80 ? "high" : ""}>{session.score || "—"}</b></span><span><ChevronRight size={17} /></span></button>)}</div>; }
 function EmptySessions({ onNew }) { return <div className="empty-state"><span><Mic /></span><h3>Your first interview starts here.</h3><p>Choose a role and create a meaningful performance baseline.</p><button className="primary" onClick={onNew}>Build an interview</button></div>; }
 
