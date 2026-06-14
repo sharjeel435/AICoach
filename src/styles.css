@@ -40,10 +40,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   display: flex; align-items: center; gap: 11px; padding: 0 8px;
   border: 0; background: none; color: #fff; cursor: pointer;
 }
-.brand > span {
-  width: 34px; height: 34px; display: grid; place-items: center;
-  border-radius: 9px; background: var(--blue);
-}
+.brand > img { width: 34px; height: 34px; display: block; border-radius: 9px; }
 .brand b { font-size: 18px; letter-spacing: -.4px; }
 .sidebar nav { margin-top: 38px; }
 .sidebar nav p {

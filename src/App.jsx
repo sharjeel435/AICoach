@@ -142,7 +142,7 @@ function Sidebar({ page, setPage, provider, onNew }) {
   ];
   return (
     <aside className="sidebar">
-      <button className="brand" onClick={() => setPage("dashboard")}><span><Sparkles size={17} /></span><b>AICoachy</b></button>
+      <button className="brand" onClick={() => setPage("dashboard")}><img src="/aicoachy-mark.svg" alt="" /><b>AICoachy</b></button>
       <nav>
         <p>Workspace</p>
         {links.map(([id, icon, label]) => (
