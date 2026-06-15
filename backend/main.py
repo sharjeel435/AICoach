@@ -148,6 +148,95 @@ ROLE_DATA = {
     },
 }
 
+ROLE_CATEGORIES = {
+    "Engineering": [
+        "Software Engineer", "Frontend Engineer", "Backend Engineer", "Full Stack Engineer",
+        "Mobile Engineer", "iOS Engineer", "Android Engineer", "DevOps Engineer",
+        "Site Reliability Engineer", "Cloud Engineer", "Platform Engineer", "Infrastructure Engineer",
+        "Security Engineer", "Application Security Engineer", "Network Engineer", "Systems Engineer",
+        "Embedded Systems Engineer", "Firmware Engineer", "QA Engineer", "Test Automation Engineer",
+        "Solutions Engineer", "Sales Engineer", "Engineering Manager", "Director of Engineering",
+        "VP of Engineering", "Chief Technology Officer", "Technical Lead", "Staff Engineer",
+        "Principal Engineer", "Machine Learning Engineer", "AI Engineer", "Data Engineer",
+        "Analytics Engineer", "Database Administrator", "Blockchain Engineer", "Game Developer",
+    ],
+    "Product and Design": [
+        "Product Manager", "Associate Product Manager", "Senior Product Manager", "Technical Product Manager",
+        "Growth Product Manager", "Platform Product Manager", "AI Product Manager", "Product Operations Manager",
+        "Director of Product", "VP of Product", "Chief Product Officer", "Product Owner",
+        "Program Manager", "Technical Program Manager", "Project Manager", "Scrum Master",
+        "UX Designer", "UI Designer", "Product Designer", "UX Researcher",
+        "Interaction Designer", "Service Designer", "Visual Designer", "Design Systems Designer",
+        "Content Designer", "UX Writer", "Design Manager", "Creative Director",
+    ],
+    "Data and Research": [
+        "Data Analyst", "Business Intelligence Analyst", "Data Scientist", "Senior Data Scientist",
+        "Research Scientist", "Applied Scientist", "Statistician", "Quantitative Analyst",
+        "Operations Research Analyst", "Economist", "Market Research Analyst", "Insights Analyst",
+        "Product Analyst", "Marketing Analyst", "Risk Analyst", "Fraud Analyst",
+        "GIS Analyst", "Bioinformatics Scientist", "Clinical Data Manager", "Research Associate",
+    ],
+    "Marketing and Communications": [
+        "Marketing Manager", "Digital Marketing Manager", "Growth Marketing Manager", "Product Marketing Manager",
+        "Content Marketing Manager", "Brand Manager", "Performance Marketing Manager", "Lifecycle Marketing Manager",
+        "SEO Specialist", "SEM Specialist", "Social Media Manager", "Community Manager",
+        "Content Strategist", "Copywriter", "Technical Writer", "Communications Manager",
+        "Public Relations Manager", "Media Planner", "Demand Generation Manager", "Marketing Operations Manager",
+        "Event Marketing Manager", "Partnerships Manager", "Influencer Marketing Manager", "Chief Marketing Officer",
+    ],
+    "Sales and Customer": [
+        "Sales Development Representative", "Business Development Representative", "Account Executive",
+        "Senior Account Executive", "Enterprise Account Executive", "Sales Manager", "Regional Sales Manager",
+        "Director of Sales", "VP of Sales", "Chief Revenue Officer", "Account Manager",
+        "Key Account Manager", "Customer Success Manager", "Customer Success Director", "Implementation Manager",
+        "Onboarding Specialist", "Customer Support Specialist", "Technical Support Engineer", "Support Manager",
+        "Solutions Consultant", "Revenue Operations Manager", "Sales Operations Analyst", "Renewals Manager",
+    ],
+    "Finance and Operations": [
+        "Financial Analyst", "Senior Financial Analyst", "Investment Analyst", "Investment Banker",
+        "Portfolio Manager", "Credit Analyst", "Treasury Analyst", "Controller",
+        "Accountant", "Auditor", "Tax Consultant", "Finance Manager",
+        "Director of Finance", "VP of Finance", "Chief Financial Officer", "Operations Analyst",
+        "Operations Manager", "Business Operations Manager", "Strategy Manager", "Management Consultant",
+        "Business Analyst", "Process Improvement Manager", "Procurement Manager", "Supply Chain Analyst",
+        "Supply Chain Manager", "Logistics Manager", "Inventory Manager", "Vendor Manager",
+    ],
+    "People and Legal": [
+        "HR Recruiter", "Technical Recruiter", "Executive Recruiter", "Talent Acquisition Manager",
+        "Human Resources Generalist", "HR Business Partner", "People Operations Manager", "Compensation Analyst",
+        "Learning and Development Manager", "Employee Relations Manager", "Director of People",
+        "Chief People Officer", "Legal Counsel", "Corporate Counsel", "Compliance Analyst",
+        "Compliance Manager", "Privacy Officer", "Contract Manager", "Paralegal", "Policy Analyst",
+    ],
+    "Healthcare and Science": [
+        "Registered Nurse", "Nurse Practitioner", "Physician Assistant", "Medical Doctor",
+        "Pharmacist", "Clinical Research Coordinator", "Clinical Research Associate", "Public Health Analyst",
+        "Healthcare Administrator", "Medical Science Liaison", "Laboratory Technician", "Biomedical Engineer",
+        "Biologist", "Chemist", "Microbiologist", "Environmental Scientist", "Food Scientist",
+        "Quality Assurance Specialist", "Regulatory Affairs Specialist", "Epidemiologist",
+    ],
+    "Education and Public Service": [
+        "Teacher", "University Lecturer", "Professor", "Instructional Designer",
+        "Curriculum Developer", "Academic Advisor", "School Counselor", "Education Program Manager",
+        "Nonprofit Program Manager", "Fundraising Manager", "Grant Writer", "Social Worker",
+        "Case Manager", "Government Program Analyst", "Urban Planner", "Foreign Service Officer",
+        "Police Officer", "Emergency Management Specialist", "Public Administrator", "Policy Advisor",
+    ],
+    "Media, Hospitality and Trades": [
+        "Journalist", "Editor", "Video Producer", "Film Producer", "Photographer",
+        "Motion Designer", "Animator", "Sound Engineer", "Event Producer", "Restaurant Manager",
+        "Hotel Manager", "Executive Chef", "Retail Store Manager", "Merchandiser", "Buyer",
+        "Real Estate Agent", "Property Manager", "Construction Project Manager", "Civil Engineer",
+        "Mechanical Engineer", "Electrical Engineer", "Chemical Engineer", "Architect", "Interior Designer",
+        "Industrial Designer", "Manufacturing Engineer", "Quality Engineer", "Maintenance Manager",
+    ],
+}
+ROLE_CATALOG = [
+    {"title": title, "category": category}
+    for category, titles in ROLE_CATEGORIES.items()
+    for title in titles
+]
+
 PERSONAS = {
     "Friendly Interviewer": {
         "tone": "Warm, patient, and encouraging",
@@ -441,6 +530,21 @@ def public_user(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def ensure_admin_role(connection: sqlite3.Connection, row: sqlite3.Row) -> sqlite3.Row:
+    admin_email = os.getenv("ADMIN_EMAIL", "").strip().lower()
+    if not admin_email or row["email"].lower() != admin_email:
+        return row
+    roles = json.loads(row["roles_json"] or '["candidate"]')
+    if "admin" not in roles:
+        roles.append("admin")
+        connection.execute(
+            "UPDATE profiles SET roles_json = ? WHERE id = ?",
+            (json.dumps(roles), row["id"]),
+        )
+        row = connection.execute("SELECT * FROM profiles WHERE id = ?", (row["id"],)).fetchone()
+    return row
+
+
 def token_digest(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
@@ -540,8 +644,37 @@ def keywords(text: str, limit: int = 10) -> list[str]:
     return [term for term, _ in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]]
 
 
+def role_data(role_title: str) -> dict[str, Any]:
+    if role_title in ROLE_DATA:
+        return ROLE_DATA[role_title]
+    lowered = role_title.lower()
+    if any(term in lowered for term in ("engineer", "developer", "architect", "technical", "security", "data")):
+        skills = ["Technical judgment", "Problem solving", "Reliability", "Collaboration", "Execution"]
+    elif any(term in lowered for term in ("manager", "director", "chief", "vp", "lead", "owner")):
+        skills = ["Leadership", "Strategy", "Execution", "Stakeholder management", "Measurable outcomes"]
+    elif any(term in lowered for term in ("designer", "writer", "creative", "editor", "producer")):
+        skills = ["Craft", "Audience insight", "Collaboration", "Decision rationale", "Outcomes"]
+    elif any(term in lowered for term in ("sales", "account", "customer", "recruiter", "marketing")):
+        skills = ["Communication", "Customer insight", "Influence", "Prioritization", "Results"]
+    else:
+        skills = ["Role expertise", "Problem solving", "Communication", "Ownership", "Results"]
+    return {
+        "skills": skills,
+        "questions": [
+            ("Experience", f"Tell me about a challenging situation that best demonstrates your readiness for a {role_title} role."),
+            ("Judgment", f"Describe an important decision you made in your work as a {role_title}. What tradeoffs did you consider?"),
+            ("Execution", "Tell me about a goal you owned from planning through delivery."),
+            ("Collaboration", "Describe a time you had to align people with different priorities."),
+            ("Problem solving", "Walk me through a difficult problem you diagnosed and resolved."),
+            ("Impact", "What professional achievement are you most proud of, and how did you measure its impact?"),
+            ("Growth", "Tell me about feedback that changed how you approach your work."),
+            ("Role depth", f"What separates an excellent {role_title} from an average one?"),
+        ],
+    }
+
+
 def analyze_target(request: TargetRequest) -> dict[str, Any]:
-    role = ROLE_DATA.get(request.role_title, ROLE_DATA["Product Manager"])
+    role = role_data(request.role_title)
     jd_terms = keywords(request.job_description)
     resume_terms = set(keywords(request.resume_text, 30))
     matched = [term for term in jd_terms if term in resume_terms]
@@ -861,7 +994,7 @@ def get_target(connection: sqlite3.Connection, target_id: str | None) -> dict[st
 
 
 def next_question(session: dict[str, Any], answer: str, score: int, number: int, target: dict[str, Any] | None) -> tuple[str, str]:
-    role = ROLE_DATA.get(session["role_title"], ROLE_DATA["Product Manager"])
+    role = role_data(session["role_title"])
     lowered = answer.lower()
     if number < session["total_questions"] and score < 70:
         if not re.search(r"\d", answer):
@@ -883,7 +1016,14 @@ def health() -> dict[str, Any]:
 
 @app.get("/api/roles")
 def roles() -> list[dict[str, Any]]:
-    return [{"title": title, **data} for title, data in ROLE_DATA.items()]
+    return [
+        {
+            **item,
+            "featured": item["title"] in ROLE_DATA,
+            "blurb": ", ".join(role_data(item["title"])["skills"][:3]),
+        }
+        for item in ROLE_CATALOG
+    ]
 
 
 @app.post("/api/auth/register")
@@ -917,6 +1057,7 @@ def login(request: LoginRequest, response: Response) -> dict[str, Any]:
             record_login_failure(connection, email)
             connection.commit()
             raise HTTPException(status_code=401, detail="Invalid email or password")
+        row = ensure_admin_role(connection, row)
         connection.execute("DELETE FROM auth_attempts WHERE identity = ?", (email,))
         connection.execute("DELETE FROM auth_tokens WHERE profile_id = ? AND expires_at <= ?", (row["id"], now()))
         active_tokens = connection.execute(
@@ -1021,7 +1162,7 @@ async def create_session(
     request.profile_id = user["id"]
     if request.persona not in PERSONAS:
         raise HTTPException(status_code=422, detail="Unknown interviewer persona")
-    role = ROLE_DATA.get(request.role_title, ROLE_DATA["Product Manager"])
+    role = role_data(request.role_title)
     if request.is_weakness_practice and request.practice_focus:
         focus = request.practice_focus[0]
         question_type, question = f"Weakness: {focus.title()}", WEAKNESS_QUESTIONS.get(focus, WEAKNESS_QUESTIONS["depth"])
@@ -1173,7 +1314,7 @@ def build_resume_improvement(
     session: dict[str, Any], answers: list[dict[str, Any]], averages: dict[str, int]
 ) -> dict[str, Any]:
     text = " ".join(item["answer"] for item in answers).lower()
-    role = ROLE_DATA.get(session["role_title"], ROLE_DATA["Product Manager"])
+    role = role_data(session["role_title"])
     demonstrated = [
         skill for skill in role["skills"]
         if any(term in text for term in skill.lower().split())

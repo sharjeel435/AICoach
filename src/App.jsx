@@ -41,28 +41,6 @@ import {
   Zap,
 } from "lucide-react";
 
-const ROLE_META = {
-  "Product Manager": {
-    icon: Target,
-    tone: "coral",
-    blurb: "Strategy, discovery, prioritization, and influence.",
-  },
-  "Software Engineer": {
-    icon: Code2,
-    tone: "blue",
-    blurb: "Systems, technical judgment, ownership, and collaboration.",
-  },
-  "Marketing Manager": {
-    icon: TrendingUp,
-    tone: "gold",
-    blurb: "Growth, customer insight, analytics, and storytelling.",
-  },
-  "UX Designer": {
-    icon: Sparkles,
-    tone: "violet",
-    blurb: "Research, design rationale, outcomes, and collaboration.",
-  },
-};
 const MODES = [
   {
     name: "Full interview",
@@ -173,6 +151,11 @@ async function api(path, options = {}) {
     const detail = Array.isArray(payload?.detail)
       ? payload.detail.map((item) => item.msg).join(", ")
       : payload?.detail;
+    if (response.status === 404 && path.startsWith("/auth/")) {
+      throw new Error(
+        "This page is connected to an outdated or static backend. Open http://localhost:5173 and refresh.",
+      );
+    }
     const error = new Error(detail || `Request failed (${response.status})`);
     error.status = response.status;
     throw error;
@@ -297,6 +280,12 @@ function AuthScreen({ onAuthenticated }) {
               {mode === "login" ? "Sign in" : "Create account"}
             </button>
           </form>
+          {mode === "login" && (
+            <p className="admin-login-note">
+              Admin access uses the same sign-in form. The email must exactly
+              match the server’s <code>ADMIN_EMAIL</code> setting.
+            </p>
+          )}
           <button
             className="auth-switch"
             onClick={() => {
@@ -323,6 +312,7 @@ function App() {
     trend: [],
   });
   const [health, setHealth] = useState({ provider: "local" });
+  const [roleOptions, setRoleOptions] = useState([]);
   const [setup, setSetup] = useState({
     role_title: "Product Manager",
     company: "",
@@ -370,6 +360,11 @@ function App() {
       }
     };
     restore();
+  }, []);
+  useEffect(() => {
+    api("/roles")
+      .then(setRoleOptions)
+      .catch(() => setRoleOptions([]));
   }, []);
   useEffect(() => {
     refreshDashboard();
@@ -494,6 +489,7 @@ function App() {
             setSetup={setSetup}
             target={target}
             setTarget={setTarget}
+            roleOptions={roleOptions}
             onStart={startSession}
             loading={loading}
           />
@@ -843,7 +839,15 @@ function TrendChart({ values }) {
   );
 }
 
-function Setup({ setup, setSetup, target, setTarget, onStart, loading }) {
+function Setup({
+  setup,
+  setSetup,
+  target,
+  setTarget,
+  roleOptions,
+  onStart,
+  loading,
+}) {
   const [step, setStep] = useState(1);
   const update = (key, value) => {
     setSetup((current) => ({ ...current, [key]: value }));
@@ -879,7 +883,9 @@ function Setup({ setup, setSetup, target, setTarget, onStart, loading }) {
       </div>
       <div className="builder-layout">
         <section className="builder-panel">
-          {step === 1 && <RoleStep setup={setup} update={update} />}
+          {step === 1 && (
+            <RoleStep setup={setup} update={update} roles={roleOptions} />
+          )}
           {step === 2 && (
             <TargetStep setup={setup} update={update} target={target} />
           )}
@@ -917,38 +923,69 @@ function Setup({ setup, setSetup, target, setTarget, onStart, loading }) {
   );
 }
 
-function RoleStep({ setup, update }) {
+function RoleStep({ setup, update, roles }) {
+  const [query, setQuery] = useState("");
+  const normalized = query.trim().toLowerCase();
+  const filtered = normalized
+    ? roles.filter((role) =>
+        `${role.title} ${role.category}`.toLowerCase().includes(normalized),
+      )
+    : roles.filter((role) => role.featured);
   return (
     <div className="builder-content">
       <span className="section-number">01 / ROLE</span>
       <h2>What role are you pursuing?</h2>
-      <p>
-        Choose the closest match. You can sharpen it with a real job description
-        next.
-      </p>
+      <p>Search the role directory or choose a common starting point.</p>
+      <label className="role-search">
+        Search more than {roles.length || 200} professions
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Try data scientist, nurse, finance manager, recruiter..."
+        />
+      </label>
+      <div className="role-results-head">
+        <span>
+          {normalized ? `${filtered.length} matches` : "Common roles"}
+        </span>
+        {normalized && (
+          <button onClick={() => setQuery("")}>Clear search</button>
+        )}
+      </div>
       <div className="role-grid">
-        {Object.entries(ROLE_META).map(([name, meta]) => (
+        {filtered.slice(0, normalized ? 24 : 8).map((role) => (
           <button
-            key={name}
-            className={`role-choice ${setup.role_title === name ? "selected" : ""}`}
-            onClick={() => update("role_title", name)}
+            key={role.title}
+            className={`role-choice ${setup.role_title === role.title ? "selected" : ""}`}
+            onClick={() => update("role_title", role.title)}
           >
             <span className="role-code">
-              {name
+              {role.title
                 .split(/\s+/)
                 .map((word) => word[0])
+                .slice(0, 3)
                 .join("")}
             </span>
             <div>
-              <strong>{name}</strong>
-              <small>{meta.blurb}</small>
+              <strong>{role.title}</strong>
+              <small>
+                {role.category} · {role.blurb}
+              </small>
             </div>
-            {setup.role_title === name && (
+            {setup.role_title === role.title && (
               <span className="selection-state">Selected</span>
             )}
           </button>
         ))}
       </div>
+      {normalized && !filtered.length && (
+        <button
+          className="custom-role"
+          onClick={() => update("role_title", query.trim())}
+        >
+          Use “{query.trim()}” as a custom role
+        </button>
+      )}
       <div className="field-row">
         <label>
           Target company

@@ -49,7 +49,7 @@ Start the complete development environment:
 npm run dev
 ```
 
-This launches both FastAPI on `http://localhost:8000` and Vite on
+This launches both FastAPI on `http://localhost:8002` and Vite on
 `http://localhost:5173`. To run them separately:
 
 ```powershell
@@ -108,6 +108,15 @@ Set `ALLOWED_ORIGINS` and `ALLOWED_HOSTS` to the exact production domains.
 can assign any combination of `candidate`, `coach`, and `admin` roles. Candidate
 data is owner-scoped; coaches and administrators can access other workspaces
 through authorized API calls.
+
+Admin uses the normal login page. If an account already existed before
+`ADMIN_EMAIL` was configured, restart FastAPI and sign in again with that exact
+email; the backend adds the admin role during the successful login.
+
+Interview professions are separate from permission roles. The setup page
+contains a searchable catalog of more than 200 professions and also accepts a
+custom role. Permission roles intentionally remain `candidate`, `coach`, and
+`admin`.
 
 ## Optional Supabase persistence
 
