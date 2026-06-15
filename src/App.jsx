@@ -186,16 +186,27 @@ function AuthScreen({ onAuthenticated }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
-  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const update = (key, value) =>
+    setForm((current) => ({ ...current, [key]: value }));
   const submit = async (event) => {
     event.preventDefault();
-    setLoading(true); setError(""); setNotice("");
+    setLoading(true);
+    setError("");
+    setNotice("");
     try {
       if (mode === "register") {
-        const result = await api("/auth/register", { method: "POST", body: JSON.stringify(form) });
-        setNotice(result.message); setMode("login"); setForm((current) => ({ ...current, password: "" }));
+        const result = await api("/auth/register", {
+          method: "POST",
+          body: JSON.stringify(form),
+        });
+        setNotice(result.message);
+        setMode("login");
+        setForm((current) => ({ ...current, password: "" }));
       } else {
-        const result = await api("/auth/login", { method: "POST", body: JSON.stringify({ email: form.email, password: form.password }) });
+        const result = await api("/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ email: form.email, password: form.password }),
+        });
         onAuthenticated(result.user);
       }
     } catch (requestError) {
@@ -204,7 +215,102 @@ function AuthScreen({ onAuthenticated }) {
       setLoading(false);
     }
   };
-  return <main className="auth-page"><section className="auth-story"><img src="/aicoachy-mark.svg" alt="" /><span className="eyebrow">AICoachy workspace</span><h1>Practice privately.<br />Improve measurably.</h1><p>Secure interview coaching with role-aware workspaces, GPT-4 feedback, and a complete local fallback.</p><div className="auth-points"><span><CircleCheck /> Private candidate workspaces</span><span><CircleCheck /> Coach and admin access controls</span><span><CircleCheck /> Revocable server-side sessions</span></div></section><section className="auth-panel"><div className="auth-card"><span className="eyebrow">{mode === "login" ? "Welcome back" : "Create your workspace"}</span><h2>{mode === "login" ? "Sign in to continue." : "Start practicing securely."}</h2><p>{mode === "login" ? "Use your account credentials to open your interview workspace." : "New accounts begin with the candidate role."}</p><form onSubmit={submit}>{mode === "register" && <label>Full name<input autoComplete="name" value={form.name} onChange={(event) => update("name", event.target.value)} required minLength={2} /></label>}<label>Email address<input type="email" autoComplete="email" value={form.email} onChange={(event) => update("email", event.target.value)} required /></label><label>Password<input type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} value={form.password} onChange={(event) => update("password", event.target.value)} required minLength={mode === "register" ? 10 : 1} /></label>{error && <p className="form-error">{error}</p>}{notice && <p className="form-success">{notice}</p>}<button className="primary" disabled={loading}>{loading && <LoaderCircle className="spin" size={16} />}{mode === "login" ? "Sign in" : "Create account"}</button></form><button className="auth-switch" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); setNotice(""); }}>{mode === "login" ? "New here? Create an account" : "Already have an account? Sign in"}</button></div></section></main>;
+  return (
+    <main className="auth-page">
+      <section className="auth-story">
+        <img src="/aicoachy-mark.svg" alt="" />
+        <span className="eyebrow">Private interview practice</span>
+        <h1>
+          Work on the answer
+          <br />
+          before it counts.
+        </h1>
+        <p>
+          Practice realistic questions, review what you actually said, and build
+          stronger examples over time.
+        </p>
+        <div className="auth-points">
+          <span>
+            <b>01</b> Your interview history stays in your workspace
+          </span>
+          <span>
+            <b>02</b> Feedback works with or without an AI provider
+          </span>
+          <span>
+            <b>03</b> Coaches only see accounts they are authorized to access
+          </span>
+        </div>
+      </section>
+      <section className="auth-panel">
+        <div className="auth-card">
+          <span className="eyebrow">
+            {mode === "login" ? "Your workspace" : "New account"}
+          </span>
+          <h2>
+            {mode === "login" ? "Welcome back." : "Create your workspace."}
+          </h2>
+          <p>
+            {mode === "login"
+              ? "Sign in to continue where you left off."
+              : "You will start with a private candidate workspace."}
+          </p>
+          <form onSubmit={submit}>
+            {mode === "register" && (
+              <label>
+                Full name
+                <input
+                  autoComplete="name"
+                  value={form.name}
+                  onChange={(event) => update("name", event.target.value)}
+                  required
+                  minLength={2}
+                />
+              </label>
+            )}
+            <label>
+              Email address
+              <input
+                type="email"
+                autoComplete="email"
+                value={form.email}
+                onChange={(event) => update("email", event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                autoComplete={
+                  mode === "login" ? "current-password" : "new-password"
+                }
+                value={form.password}
+                onChange={(event) => update("password", event.target.value)}
+                required
+                minLength={mode === "register" ? 10 : 1}
+              />
+            </label>
+            {error && <p className="form-error">{error}</p>}
+            {notice && <p className="form-success">{notice}</p>}
+            <button className="primary" disabled={loading}>
+              {loading && <LoaderCircle className="spin" size={16} />}
+              {mode === "login" ? "Sign in" : "Create account"}
+            </button>
+          </form>
+          <button
+            className="auth-switch"
+            onClick={() => {
+              setMode(mode === "login" ? "register" : "login");
+              setError("");
+              setNotice("");
+            }}
+          >
+            {mode === "login" ? "Create a new account" : "Back to sign in"}
+          </button>
+        </div>
+      </section>
+    </main>
+  );
 }
 
 function App() {
@@ -257,13 +363,17 @@ function App() {
     const restore = async () => {
       try {
         setUser(await api("/auth/me"));
-      } catch { /* no active browser session */ } finally {
+      } catch {
+        /* no active browser session */
+      } finally {
         setAuthReady(true);
       }
     };
     restore();
   }, []);
-  useEffect(() => { refreshDashboard(); }, [refreshDashboard]);
+  useEffect(() => {
+    refreshDashboard();
+  }, [refreshDashboard]);
   useEffect(() => {
     if (!toast) return undefined;
     const timer = setTimeout(() => setToast(""), 2800);
@@ -351,7 +461,11 @@ function App() {
   };
 
   if (!authReady) {
-    return <div className="auth-loading"><LoaderCircle className="spin" /></div>;
+    return (
+      <div className="auth-loading">
+        <LoaderCircle className="spin" />
+      </div>
+    );
   }
   if (!user) return <AuthScreen onAuthenticated={setUser} />;
 
@@ -476,12 +590,21 @@ function Sidebar({ page, setPage, provider, onNew, user, onLogout }) {
         </div>
       </div>
       <div className="profile-chip">
-        <span>{user.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
+        <span>
+          {user.name
+            .split(/\s+/)
+            .map((part) => part[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase()}
+        </span>
         <div>
           <strong>{user.name}</strong>
           <small>{user.roles.join(" · ")}</small>
         </div>
-        <button className="logout-button" onClick={onLogout} title="Sign out"><Settings2 size={16} /></button>
+        <button className="logout-button" onClick={onLogout} title="Sign out">
+          <Settings2 size={16} />
+        </button>
       </div>
     </aside>
   );
@@ -548,7 +671,7 @@ function Dashboard({ data, onNew, onOpen }) {
             style={{ "--value": stats.average_score || 0 }}
           >
             <div>
-              <BrainCircuit />
+              <span className="readiness-label">Current level</span>
               <strong>
                 {stats.total_sessions ? "In progress" : "No baseline"}
               </strong>
@@ -574,19 +697,19 @@ function Dashboard({ data, onNew, onOpen }) {
 
       <section className="metric-grid">
         <Metric
-          icon={MessageSquareText}
+          index="01"
           label="Questions answered"
           value={stats.questions_answered || 0}
           note="Across all practice sessions"
         />
         <Metric
-          icon={Gauge}
+          index="02"
           label="Average score"
           value={`${stats.average_score || 0}%`}
           note="Quality across five dimensions"
         />
         <Metric
-          icon={TrendingUp}
+          index="03"
           label="Personal best"
           value={`${stats.best_score || 0}%`}
           note={
@@ -596,7 +719,7 @@ function Dashboard({ data, onNew, onOpen }) {
           }
         />
         <Metric
-          icon={Clock3}
+          index="04"
           label="Practice sessions"
           value={stats.total_sessions || 0}
           note="Saved automatically"
@@ -628,9 +751,7 @@ function Dashboard({ data, onNew, onOpen }) {
             kicker="Recommended next"
             title="Your highest-value drill"
           />
-          <span className="focus-icon">
-            <Target />
-          </span>
+          <span className="focus-label">Based on your recent answers</span>
           <h3>Make impact measurable</h3>
           <p>
             Practice closing every story with a baseline, a result, and why that
@@ -663,11 +784,11 @@ function Dashboard({ data, onNew, onOpen }) {
   );
 }
 
-function Metric({ icon, label, value, note }) {
+function Metric({ index, label, value, note }) {
   return (
     <article className="metric">
       <div>
-        <span>{createElement(icon, { size: 18 })}</span>
+        <span className="metric-index">{index}</span>
         <small>{label}</small>
       </div>
       <strong>{value}</strong>
@@ -806,25 +927,27 @@ function RoleStep({ setup, update }) {
         next.
       </p>
       <div className="role-grid">
-        {Object.entries(ROLE_META).map(([name, meta]) => {
-          const Icon = meta.icon;
-          return (
-            <button
-              key={name}
-              className={`role-choice ${setup.role_title === name ? "selected" : ""}`}
-              onClick={() => update("role_title", name)}
-            >
-              <span className={meta.tone}>
-                <Icon size={20} />
-              </span>
-              <div>
-                <strong>{name}</strong>
-                <small>{meta.blurb}</small>
-              </div>
-              {setup.role_title === name && <CircleCheck size={19} />}
-            </button>
-          );
-        })}
+        {Object.entries(ROLE_META).map(([name, meta]) => (
+          <button
+            key={name}
+            className={`role-choice ${setup.role_title === name ? "selected" : ""}`}
+            onClick={() => update("role_title", name)}
+          >
+            <span className="role-code">
+              {name
+                .split(/\s+/)
+                .map((word) => word[0])
+                .join("")}
+            </span>
+            <div>
+              <strong>{name}</strong>
+              <small>{meta.blurb}</small>
+            </div>
+            {setup.role_title === name && (
+              <span className="selection-state">Selected</span>
+            )}
+          </button>
+        ))}
       </div>
       <div className="field-row">
         <label>
@@ -942,21 +1065,20 @@ function StyleStep({ setup, update }) {
         practice.
       </p>
       <div className="mode-grid">
-        {MODES.map((mode) => {
-          const Icon = mode.icon;
-          return (
-            <button
-              key={mode.name}
-              className={setup.mode === mode.name ? "selected" : ""}
-              onClick={() => update("mode", mode.name)}
-            >
-              <Icon size={20} />
-              <strong>{mode.name}</strong>
-              <span>{mode.description}</span>
-              {setup.mode === mode.name && <Check size={15} />}
-            </button>
-          );
-        })}
+        {MODES.map((mode, index) => (
+          <button
+            key={mode.name}
+            className={setup.mode === mode.name ? "selected" : ""}
+            onClick={() => update("mode", mode.name)}
+          >
+            <small className="option-number">0{index + 1}</small>
+            <strong>{mode.name}</strong>
+            <span>{mode.description}</span>
+            {setup.mode === mode.name && (
+              <span className="selected-word">Selected</span>
+            )}
+          </button>
+        ))}
       </div>
       <div className="persona-heading">
         <span className="section-number">INTERVIEWER PERSONA</span>
@@ -967,26 +1089,25 @@ function StyleStep({ setup, update }) {
         </p>
       </div>
       <div className="persona-grid">
-        {PERSONAS.map((persona) => {
-          const Icon = persona.icon;
-          return (
-            <button
-              key={persona.name}
-              className={setup.persona === persona.name ? "selected" : ""}
-              onClick={() => update("persona", persona.name)}
-            >
-              <span>
-                <Icon size={17} />
-              </span>
-              <div>
-                <strong>{persona.name}</strong>
-                <small>{persona.description}</small>
-                <em>{persona.focus}</em>
-              </div>
-              {setup.persona === persona.name && <CircleCheck size={17} />}
-            </button>
-          );
-        })}
+        {PERSONAS.map((persona, index) => (
+          <button
+            key={persona.name}
+            className={setup.persona === persona.name ? "selected" : ""}
+            onClick={() => update("persona", persona.name)}
+          >
+            <span className="persona-number">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <div>
+              <strong>{persona.name}</strong>
+              <small>{persona.description}</small>
+              <em>{persona.focus}</em>
+            </div>
+            {setup.persona === persona.name && (
+              <span className="selection-state">Selected</span>
+            )}
+          </button>
+        ))}
       </div>
       <div className="field-row three">
         <label>
@@ -1034,14 +1155,15 @@ function StyleStep({ setup, update }) {
 }
 
 function SessionPreview({ setup, target }) {
-  const meta = ROLE_META[setup.role_title];
-  const Icon = meta.icon;
   const analysis = target?.analysis;
   return (
     <aside className="preview-card">
       <span className="preview-kicker">Session preview</span>
-      <div className={`preview-icon ${meta.tone}`}>
-        <Icon />
+      <div className="preview-role-code">
+        {setup.role_title
+          .split(/\s+/)
+          .map((word) => word[0])
+          .join("")}
       </div>
       <h3>{setup.role_title}</h3>
       <p>
@@ -1049,19 +1171,19 @@ function SessionPreview({ setup, target }) {
       </p>
       <div className="preview-list">
         <span>
-          <BrainCircuit />
+          <small>Format</small>
           {setup.mode}
         </span>
         <span>
-          <Gauge />
+          <small>Difficulty</small>
           {setup.difficulty} difficulty
         </span>
         <span>
-          <MessageSquareText />
+          <small>Length</small>
           {setup.total_questions} questions
         </span>
         <span>
-          <Headphones />
+          <small>Response</small>
           Voice and text enabled
         </span>
       </div>
@@ -1703,7 +1825,11 @@ function Report({ report, onNew, onPractice, loading }) {
             onClick={() => onPractice(session.id)}
             disabled={loading}
           >
-            {loading ? <LoaderCircle className="spin" size={16} /> : <Target size={16} />}
+            {loading ? (
+              <LoaderCircle className="spin" size={16} />
+            ) : (
+              <Target size={16} />
+            )}
             Practice My Weak Areas
           </button>
           <button className="secondary" onClick={download}>
@@ -1794,7 +1920,9 @@ function Report({ report, onNew, onPractice, loading }) {
               </div>
               <div className="replay-content">
                 <div className="replay-meta">
-                  <span>{formatTime(item.delivery.duration_seconds || 0)} spent</span>
+                  <span>
+                    {formatTime(item.delivery.duration_seconds || 0)} spent
+                  </span>
                   <strong>{item.feedback.overall_score}/100</strong>
                 </div>
                 <h3>{item.question}</h3>
@@ -1803,17 +1931,28 @@ function Report({ report, onNew, onPractice, loading }) {
                   <p>{item.answer}</p>
                 </div>
                 <div className="replay-insights">
-                  <div><span>Main weakness</span><p>{item.main_weakness}</p></div>
-                  <div><span>Main improvement</span><p>{item.main_improvement}</p></div>
+                  <div>
+                    <span>Main weakness</span>
+                    <p>{item.main_weakness}</p>
+                  </div>
+                  <div>
+                    <span>Main improvement</span>
+                    <p>{item.main_improvement}</p>
+                  </div>
                 </div>
                 <details>
-                  <summary>View improved answer <ChevronRight size={15} /></summary>
+                  <summary>
+                    View improved answer <ChevronRight size={15} />
+                  </summary>
                   <p>{item.improved_answer}</p>
                 </details>
                 {item.follow_up_question && (
                   <div className="follow-up-review">
                     <MessageSquareText size={14} />
-                    <p><span>Follow-up</span>{item.follow_up_question}</p>
+                    <p>
+                      <span>Follow-up</span>
+                      {item.follow_up_question}
+                    </p>
                   </div>
                 )}
               </div>
@@ -1827,17 +1966,32 @@ function Report({ report, onNew, onPractice, loading }) {
             <span className="eyebrow">Resume improvement suggestions</span>
             <h2>Turn interview evidence into stronger positioning.</h2>
           </div>
-          <span><FileText size={18} /> Role-aligned</span>
+          <span>
+            <FileText size={18} /> Role-aligned
+          </span>
         </div>
         <div className="resume-grid">
-          <ResumeInsight title="Demonstrated skills" items={resume.demonstrated_skills} positive />
+          <ResumeInsight
+            title="Demonstrated skills"
+            items={resume.demonstrated_skills}
+            positive
+          />
           <ResumeInsight title="Missing skills" items={resume.missing_skills} />
-          <ResumeInsight title="Recommended keywords" items={resume.missing_keywords} tags />
+          <ResumeInsight
+            title="Recommended keywords"
+            items={resume.missing_keywords}
+            tags
+          />
           <ResumeInsight title="Project ideas" items={resume.project_ideas} />
         </div>
         <div className="resume-bullets">
           <h3>Suggested resume bullets</h3>
-          {(resume.suggested_bullets || []).map((item) => <p key={item}><Sparkles size={14} />{item}</p>)}
+          {(resume.suggested_bullets || []).map((item) => (
+            <p key={item}>
+              <Sparkles size={14} />
+              {item}
+            </p>
+          ))}
         </div>
       </section>
       <section className="answer-review">
@@ -1881,7 +2035,23 @@ function Report({ report, onNew, onPractice, loading }) {
 }
 
 function ResumeInsight({ title, items = [], positive = false, tags = false }) {
-  return <article className={`resume-insight ${positive ? "positive" : ""}`}><h3>{title}</h3><div className={tags ? "keyword-tags" : ""}>{items.map((item) => tags ? <span key={item}>{item}</span> : <p key={item}><Check size={13} />{item}</p>)}</div></article>;
+  return (
+    <article className={`resume-insight ${positive ? "positive" : ""}`}>
+      <h3>{title}</h3>
+      <div className={tags ? "keyword-tags" : ""}>
+        {items.map((item) =>
+          tags ? (
+            <span key={item}>{item}</span>
+          ) : (
+            <p key={item}>
+              <Check size={13} />
+              {item}
+            </p>
+          ),
+        )}
+      </div>
+    </article>
+  );
 }
 
 function Radar({ scores }) {
@@ -1930,27 +2100,85 @@ function AdminUsers() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState("");
   const load = useCallback(async () => {
-    try { setUsers(await api("/admin/users")); } catch (requestError) { setError(requestError.message); }
+    try {
+      setUsers(await api("/admin/users"));
+    } catch (requestError) {
+      setError(requestError.message);
+    }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
   const toggleRole = async (profile, role) => {
     const roles = profile.roles.includes(role)
       ? profile.roles.filter((item) => item !== role)
       : [...profile.roles, role];
     if (!roles.length) return;
-    setSaving(profile.id); setError("");
+    setSaving(profile.id);
+    setError("");
     try {
       const updated = await api(`/admin/users/${profile.id}/roles`, {
-        method: "PUT", body: JSON.stringify({ roles }),
+        method: "PUT",
+        body: JSON.stringify({ roles }),
       });
-      setUsers((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setUsers((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
     } catch (requestError) {
       setError(requestError.message);
     } finally {
       setSaving("");
     }
   };
-  return <main className="page admin-page"><div className="page-title"><div><span className="eyebrow">Access control</span><h1>Users and workspace roles.</h1><p>Assign multiple roles without exposing credentials or weakening candidate data isolation.</p></div></div>{error && <p className="form-error">{error}</p>}<section className="user-management"><div className="user-management-head"><span>User</span><span>Roles</span><span>Status</span></div>{users.map((profile) => <article key={profile.id}><div className="managed-user"><span>{profile.name.slice(0, 2).toUpperCase()}</span><div><strong>{profile.name}</strong><small>{profile.email}</small></div></div><div className="role-toggles">{["candidate", "coach", "admin"].map((role) => <button key={role} className={profile.roles.includes(role) ? "active" : ""} disabled={saving === profile.id} onClick={() => toggleRole(profile, role)}>{profile.roles.includes(role) && <Check size={12} />}{role}</button>)}</div><span className="access-status">{saving === profile.id ? "Saving..." : "Active"}</span></article>)}</section></main>;
+  return (
+    <main className="page admin-page">
+      <div className="page-title">
+        <div>
+          <span className="eyebrow">Access control</span>
+          <h1>Users and workspace roles.</h1>
+          <p>
+            Assign multiple roles without exposing credentials or weakening
+            candidate data isolation.
+          </p>
+        </div>
+      </div>
+      {error && <p className="form-error">{error}</p>}
+      <section className="user-management">
+        <div className="user-management-head">
+          <span>User</span>
+          <span>Roles</span>
+          <span>Status</span>
+        </div>
+        {users.map((profile) => (
+          <article key={profile.id}>
+            <div className="managed-user">
+              <span>{profile.name.slice(0, 2).toUpperCase()}</span>
+              <div>
+                <strong>{profile.name}</strong>
+                <small>{profile.email}</small>
+              </div>
+            </div>
+            <div className="role-toggles">
+              {["candidate", "coach", "admin"].map((role) => (
+                <button
+                  key={role}
+                  className={profile.roles.includes(role) ? "active" : ""}
+                  disabled={saving === profile.id}
+                  onClick={() => toggleRole(profile, role)}
+                >
+                  {profile.roles.includes(role) && <Check size={12} />}
+                  {role}
+                </button>
+              ))}
+            </div>
+            <span className="access-status">
+              {saving === profile.id ? "Saving..." : "Active"}
+            </span>
+          </article>
+        ))}
+      </section>
+    </main>
+  );
 }
 
 function HistoryPage({ data, onOpen, onNew }) {
