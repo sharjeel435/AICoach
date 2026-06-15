@@ -116,7 +116,8 @@ enabled as an additional persistence destination for interview sessions and
 generated session summaries.
 
 1. Run [`backend/supabase_migration.sql`](backend/supabase_migration.sql) in
-   the Supabase SQL editor.
+   the Supabase SQL editor. It creates the required tables on a new project and
+   safely upgrades them when they already exist.
 2. Add these server-only values to `.env`:
 
 ```env
