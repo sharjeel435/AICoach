@@ -416,13 +416,6 @@ def init_db() -> None:
         connection.execute("PRAGMA journal_mode = WAL")
         connection.execute("PRAGMA synchronous = NORMAL")
         connection.execute("DELETE FROM auth_tokens WHERE expires_at <= ?", (now(),))
-        integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
-        if integrity != "ok":
-            raise RuntimeError(f"SQLite integrity check failed: {integrity}")
-    try:
-        os.chmod(DB_PATH, 0o600)
-    except OSError:
-        pass
         session_columns = {row["name"] for row in connection.execute("PRAGMA table_info(sessions)")}
         for column, definition in {
             "persona": "TEXT NOT NULL DEFAULT 'Friendly Interviewer'",
@@ -443,6 +436,13 @@ def init_db() -> None:
                 """ALTER TABLE profiles ADD COLUMN roles_json
                 TEXT NOT NULL DEFAULT '["candidate"]'"""
             )
+        integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+        if integrity != "ok":
+            raise RuntimeError(f"SQLite integrity check failed: {integrity}")
+    try:
+        os.chmod(DB_PATH, 0o600)
+    except OSError:
+        pass
 
 
 init_db()
@@ -530,9 +530,23 @@ def public_user(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def configured_admin_emails() -> set[str]:
+    values = [os.getenv("ADMIN_EMAIL", ""), os.getenv("ADMIN_EMAILS", "")]
+    emails = {
+        item.strip().lower()
+        for value in values
+        for item in value.split(",")
+        if item.strip()
+    }
+    return {
+        email
+        for email in emails
+        if re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email)
+    }
+
+
 def ensure_admin_role(connection: sqlite3.Connection, row: sqlite3.Row) -> sqlite3.Row:
-    admin_email = os.getenv("ADMIN_EMAIL", "").strip().lower()
-    if not admin_email or row["email"].lower() != admin_email:
+    if row["email"].lower() not in configured_admin_emails():
         return row
     roles = json.loads(row["roles_json"] or '["candidate"]')
     if "admin" not in roles:
@@ -1031,7 +1045,7 @@ def register(request: RegisterRequest) -> dict[str, Any]:
     email = normalized_email(request.email)
     profile_id = str(uuid.uuid4())
     roles = ["candidate"]
-    if email == os.getenv("ADMIN_EMAIL", "").strip().lower():
+    if email in configured_admin_emails():
         roles.append("admin")
     with db() as connection:
         if connection.execute("SELECT 1 FROM profiles WHERE lower(email) = ?", (email,)).fetchone():

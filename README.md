@@ -104,10 +104,11 @@ manager. Enable GitHub secret scanning and push protection for the repository.
 Set `COOKIE_SECURE=true` when serving the application over HTTPS.
 Set `ALLOWED_ORIGINS` and `ALLOWED_HOSTS` to the exact production domains.
 
-`ADMIN_EMAIL` grants the `admin` role when that email registers. Administrators
-can assign any combination of `candidate`, `coach`, and `admin` roles. Candidate
-data is owner-scoped; coaches and administrators can access other workspaces
-through authorized API calls.
+`ADMIN_EMAIL` grants the `admin` role when that email registers. Use
+`ADMIN_EMAILS` as a comma-separated list when multiple bootstrap admin emails
+are needed. Administrators can assign any combination of `candidate`, `coach`,
+and `admin` roles. Candidate data is owner-scoped; coaches and administrators
+can access other workspaces through authorized API calls.
 
 Admin uses the normal login page. If an account already existed before
 `ADMIN_EMAIL` was configured, restart FastAPI and sign in again with that exact
