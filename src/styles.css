@@ -1141,6 +1141,9 @@ textarea:focus {
   gap: 9px;
   color: #98a2b3;
 }
+.preview-note.synced {
+  color: #b7f7ce;
+}
 .preview-note p {
   margin: 0;
   font-size: 9px;

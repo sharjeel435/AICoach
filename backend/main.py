@@ -1,6 +1,7 @@
 import json
 import hashlib
 import hmac
+import io
 import os
 import re
 import secrets
@@ -14,7 +15,7 @@ from urllib.parse import urlparse
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi import Cookie, Depends, FastAPI, File, Header, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -306,6 +307,8 @@ WEAKNESS_QUESTIONS = {
 FILLERS = ["um", "uh", "like", "basically", "actually", "you know", "sort of", "kind of"]
 ACTION_WORDS = ["led", "built", "created", "decided", "analyzed", "designed", "implemented", "negotiated", "launched", "improved"]
 RESULT_WORDS = ["result", "impact", "increased", "decreased", "reduced", "grew", "saved", "conversion", "revenue", "learned"]
+DOCUMENT_TEXT_LIMIT = 30000
+DOCUMENT_UPLOAD_LIMIT = 8 * 1024 * 1024
 
 
 def now() -> str:
@@ -585,6 +588,80 @@ def normalized_email(email: str) -> str:
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
         raise HTTPException(status_code=422, detail="Enter a valid email address")
     return value
+
+
+def document_extension(filename: str) -> str:
+    return filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+
+def clamp_document_text(text: str) -> dict[str, Any]:
+    normalized = re.sub(r"\r\n?", "\n", text).strip()
+    return {
+        "text": normalized[:DOCUMENT_TEXT_LIMIT],
+        "truncated": len(normalized) > DOCUMENT_TEXT_LIMIT,
+    }
+
+
+def extract_pdf_bytes(content: bytes) -> str:
+    from pypdf import PdfReader
+
+    reader = PdfReader(io.BytesIO(content))
+    return "\n\n".join(page.extract_text() or "" for page in reader.pages)
+
+
+def extract_docx_bytes(content: bytes) -> str:
+    from docx import Document
+
+    document = Document(io.BytesIO(content))
+    paragraphs = [paragraph.text for paragraph in document.paragraphs]
+    for table in document.tables:
+        for row in table.rows:
+            paragraphs.extend(cell.text for cell in row.cells)
+    return "\n".join(paragraphs)
+
+
+def strip_rtf_text(text: str) -> str:
+    stripped = re.sub(r"\\[a-zA-Z]+-?\d* ?", "", text.replace("\\par", "\n"))
+    return re.sub(r"\n{3,}", "\n\n", stripped)
+
+
+def strip_html_text(text: str) -> str:
+    text = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", text)
+    text = re.sub(r"(?s)<[^>]+>", " ", text)
+    return re.sub(r"\s{2,}", " ", text)
+
+
+def strip_legacy_doc_text(text: str) -> str:
+    readable = "".join(
+        character if character.isprintable() or character in "\n\t" else " "
+        for character in text
+    )
+    return re.sub(r"\s{2,}", " ", readable)
+
+
+def extract_document_bytes(filename: str, content_type: str, content: bytes) -> dict[str, Any]:
+    extension = document_extension(filename)
+    if extension == "pdf" or content_type == "application/pdf":
+        text = extract_pdf_bytes(content)
+    elif (
+        extension == "docx"
+        or content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ):
+        text = extract_docx_bytes(content)
+    else:
+        decoded = content.decode("utf-8", errors="ignore")
+        if extension == "rtf":
+            text = strip_rtf_text(decoded)
+        elif extension in {"html", "htm"}:
+            text = strip_html_text(decoded)
+        elif extension == "doc":
+            text = strip_legacy_doc_text(decoded)
+        else:
+            text = decoded
+    result = clamp_document_text(text)
+    if not result["text"]:
+        raise HTTPException(status_code=422, detail="No readable text was found in that file")
+    return result
 
 
 def check_login_lock(connection: sqlite3.Connection, identity: str) -> None:
@@ -1055,6 +1132,26 @@ def roles() -> list[dict[str, Any]]:
         }
         for item in ROLE_CATALOG
     ]
+
+
+@app.post("/api/documents/extract")
+async def extract_document(
+    file: UploadFile = File(...),
+    user: dict[str, Any] = Depends(current_user),
+) -> dict[str, Any]:
+    del user
+    content = await file.read()
+    if len(content) > DOCUMENT_UPLOAD_LIMIT:
+        raise HTTPException(status_code=413, detail="Upload a document smaller than 8 MB")
+    extracted = extract_document_bytes(
+        file.filename or "document",
+        file.content_type or "",
+        content,
+    )
+    return {
+        "filename": file.filename,
+        **extracted,
+    }
 
 
 @app.post("/api/auth/register")

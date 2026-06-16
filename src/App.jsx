@@ -218,11 +218,12 @@ async function extractDocumentText(file) {
 
 async function api(path, options = {}) {
   let response;
+  const isFormData = options.body instanceof FormData;
   try {
     response = await fetch(`/api${path}`, {
       credentials: "same-origin",
       headers: {
-        "Content-Type": "application/json",
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
         ...options.headers,
       },
       ...options,
@@ -248,6 +249,15 @@ async function api(path, options = {}) {
     throw error;
   }
   return response.json();
+}
+
+async function serverExtractDocument(file) {
+  const body = new FormData();
+  body.append("file", file);
+  return api("/documents/extract", {
+    method: "POST",
+    body,
+  });
 }
 
 function AuthScreen({ onAuthenticated }) {
@@ -1102,6 +1112,26 @@ function RoleStep({ setup, update, roles }) {
 
 function TargetStep({ setup, update }) {
   const [fileState, setFileState] = useState({});
+  const extractWithFallback = async (file) => {
+    try {
+      const text = await extractDocumentText(file);
+      const { text: normalized } = clampDocumentText(text);
+      if (
+        normalized.length >= 20 ||
+        !["pdf", "docx"].includes(fileExtension(file))
+      ) {
+        return { text };
+      }
+      throw new Error("Browser extraction returned too little text.");
+    } catch {
+      const result = await serverExtractDocument(file);
+      return {
+        text: result.text,
+        truncated: result.truncated,
+        source: "server",
+      };
+    }
+  };
   const loadFile = async (key, file) => {
     if (!file) return;
     setFileState((current) => ({
@@ -1109,8 +1139,8 @@ function TargetStep({ setup, update }) {
       [key]: { status: "loading", message: `Reading ${file.name}...` },
     }));
     try {
-      const extracted = await extractDocumentText(file);
-      const { text, truncated } = clampDocumentText(extracted);
+      const extracted = await extractWithFallback(file);
+      const { text, truncated } = clampDocumentText(extracted.text);
       if (!text) {
         throw new Error("No readable text was found in that file.");
       }
@@ -1119,7 +1149,7 @@ function TargetStep({ setup, update }) {
         ...current,
         [key]: {
           status: "success",
-          message: `${file.name} imported${truncated ? " and trimmed to 30,000 characters" : ""}.`,
+          message: `${file.name} synced (${text.length} characters${truncated || extracted.truncated ? ", trimmed" : ""}).`,
         },
       }));
     } catch (error) {
@@ -1333,6 +1363,8 @@ function StyleStep({ setup, update }) {
 
 function SessionPreview({ setup, target }) {
   const analysis = target?.analysis;
+  const resumeLoaded = setup.resume_text.trim().length > 0;
+  const jobLoaded = setup.job_description.trim().length > 0;
   return (
     <aside className="preview-card">
       <span className="preview-kicker">Session preview</span>
@@ -1363,11 +1395,27 @@ function SessionPreview({ setup, target }) {
           <small>Response</small>
           Voice and text enabled
         </span>
+        <span>
+          <small>Resume</small>
+          {resumeLoaded ? "Synced" : "Not added"}
+        </span>
+        <span>
+          <small>Job file</small>
+          {jobLoaded ? "Synced" : "Not added"}
+        </span>
       </div>
       {analysis ? (
         <div className="match-card">
           <strong>{analysis.match_score}% match</strong>
           <p>{analysis.positioning}</p>
+        </div>
+      ) : resumeLoaded || jobLoaded ? (
+        <div className="preview-note synced">
+          <CircleCheck size={17} />
+          <p>
+            Uploaded context is synced. Start the interview to generate
+            role-specific questions and gap analysis.
+          </p>
         </div>
       ) : (
         <div className="preview-note">
