@@ -1,4 +1,5 @@
 import { createElement, useCallback, useEffect, useRef, useState } from "react";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import {
   Activity,
   ArrowLeft,
@@ -128,6 +129,92 @@ const SAMPLE_FEEDBACK = {
   ],
   star: { situation: 82, task: 74, action: 78, result: 61 },
 };
+const DOCUMENT_TEXT_LIMIT = 30000;
+const DOCUMENT_ACCEPT =
+  ".pdf,.docx,.doc,.txt,.md,.markdown,.rtf,.csv,.json,.html,.htm";
+
+function clampDocumentText(text) {
+  const normalized = text.replace(/\r\n?/g, "\n").trim();
+  return {
+    text: normalized.slice(0, DOCUMENT_TEXT_LIMIT),
+    truncated: normalized.length > DOCUMENT_TEXT_LIMIT,
+  };
+}
+
+function fileExtension(file) {
+  return file.name.split(".").pop()?.toLowerCase() || "";
+}
+
+async function extractPdfText(file) {
+  const pdfjs = await import("pdfjs-dist/build/pdf.mjs");
+  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+  const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() })
+    .promise;
+  const pages = [];
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+    pages.push(content.items.map((item) => item.str).join(" "));
+  }
+  return pages.join("\n\n");
+}
+
+async function extractDocxText(file) {
+  const module = await import("mammoth/mammoth.browser");
+  const mammoth = module.default || module;
+  const result = await mammoth.extractRawText({
+    arrayBuffer: await file.arrayBuffer(),
+  });
+  return result.value;
+}
+
+function stripRtf(text) {
+  return text
+    .replace(/\\par[d]?/g, "\n")
+    .replace(/\\'[0-9a-fA-F]{2}/g, " ")
+    .replace(/[{}]/g, "")
+    .replace(/\\[a-zA-Z]+-?\d* ?/g, "")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
+function stripHtml(text) {
+  const document = new DOMParser().parseFromString(text, "text/html");
+  return document.body.textContent || "";
+}
+
+function stripLegacyDocText(text) {
+  return Array.from(text)
+    .map((character) => {
+      const code = character.charCodeAt(0);
+      return code === 9 ||
+        code === 10 ||
+        code === 13 ||
+        (code >= 32 && code <= 126)
+        ? character
+        : " ";
+    })
+    .join("")
+    .replace(/\s{2,}/g, " ");
+}
+
+async function extractDocumentText(file) {
+  const extension = fileExtension(file);
+  if (extension === "pdf" || file.type === "application/pdf") {
+    return extractPdfText(file);
+  }
+  if (
+    extension === "docx" ||
+    file.type ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  ) {
+    return extractDocxText(file);
+  }
+  const text = await file.text();
+  if (extension === "rtf") return stripRtf(text);
+  if (["html", "htm"].includes(extension)) return stripHtml(text);
+  if (extension === "doc") return stripLegacyDocText(text);
+  return text;
+}
 
 async function api(path, options = {}) {
   let response;
@@ -1014,19 +1101,50 @@ function RoleStep({ setup, update, roles }) {
 }
 
 function TargetStep({ setup, update }) {
-  const loadFile = (key, file) => {
+  const [fileState, setFileState] = useState({});
+  const loadFile = async (key, file) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => update(key, String(reader.result));
-    reader.readAsText(file);
+    setFileState((current) => ({
+      ...current,
+      [key]: { status: "loading", message: `Reading ${file.name}...` },
+    }));
+    try {
+      const extracted = await extractDocumentText(file);
+      const { text, truncated } = clampDocumentText(extracted);
+      if (!text) {
+        throw new Error("No readable text was found in that file.");
+      }
+      update(key, text);
+      setFileState((current) => ({
+        ...current,
+        [key]: {
+          status: "success",
+          message: `${file.name} imported${truncated ? " and trimmed to 30,000 characters" : ""}.`,
+        },
+      }));
+    } catch (error) {
+      setFileState((current) => ({
+        ...current,
+        [key]: {
+          status: "error",
+          message:
+            error.message ||
+            "Could not read this file. Paste the text into the box instead.",
+        },
+      }));
+    }
+  };
+  const updateText = (key, value) => {
+    update(key, value.slice(0, DOCUMENT_TEXT_LIMIT));
+    setFileState((current) => ({ ...current, [key]: null }));
   };
   return (
     <div className="builder-content">
       <span className="section-number">02 / INTELLIGENCE</span>
       <h2>Make it specific to the opportunity.</h2>
       <p>
-        Paste the source material. Everything stays on this machine unless you
-        connect an AI provider.
+        Paste the source material or upload a document. Everything stays on this
+        machine unless you connect an AI provider.
       </p>
       <div className="document-grid">
         <label className="document-field">
@@ -1040,17 +1158,28 @@ function TargetStep({ setup, update }) {
           </span>
           <textarea
             value={setup.resume_text}
-            onChange={(event) => update("resume_text", event.target.value)}
+            maxLength={DOCUMENT_TEXT_LIMIT}
+            onChange={(event) =>
+              updateText("resume_text", event.target.value)
+            }
             placeholder="Paste your resume, key projects, or experience highlights…"
           />
           <input
             type="file"
-            accept=".txt,.md"
-            onChange={(event) => loadFile("resume_text", event.target.files[0])}
+            accept={DOCUMENT_ACCEPT}
+            onChange={(event) => {
+              loadFile("resume_text", event.target.files[0]);
+              event.target.value = "";
+            }}
           />
           <b>
-            <Upload size={14} /> Import .txt or .md
+            <Upload size={14} /> Import PDF, DOCX, or text
           </b>
+          {fileState.resume_text?.message && (
+            <small className={`file-state ${fileState.resume_text.status}`}>
+              {fileState.resume_text.message}
+            </small>
+          )}
         </label>
         <label className="document-field">
           <span>
@@ -1063,19 +1192,30 @@ function TargetStep({ setup, update }) {
           </span>
           <textarea
             value={setup.job_description}
-            onChange={(event) => update("job_description", event.target.value)}
+            maxLength={DOCUMENT_TEXT_LIMIT}
+            onChange={(event) =>
+              updateText("job_description", event.target.value)
+            }
             placeholder="Paste responsibilities, requirements, and company context…"
           />
           <input
             type="file"
-            accept=".txt,.md"
-            onChange={(event) =>
-              loadFile("job_description", event.target.files[0])
-            }
+            accept={DOCUMENT_ACCEPT}
+            onChange={(event) => {
+              loadFile("job_description", event.target.files[0]);
+              event.target.value = "";
+            }}
           />
           <b>
-            <Upload size={14} /> Import .txt or .md
+            <Upload size={14} /> Import PDF, DOCX, or text
           </b>
+          {fileState.job_description?.message && (
+            <small
+              className={`file-state ${fileState.job_description.status}`}
+            >
+              {fileState.job_description.message}
+            </small>
+          )}
         </label>
       </div>
       <div className="privacy-strip">

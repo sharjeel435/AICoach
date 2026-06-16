@@ -1166,6 +1166,7 @@ textarea:focus {
 }
 .document-field {
   position: relative;
+  padding-bottom: 30px;
 }
 .document-field > span {
   margin-bottom: 7px;
@@ -1181,7 +1182,7 @@ textarea:focus {
 }
 .document-field textarea {
   height: 250px;
-  padding: 14px;
+  padding: 14px 14px 46px;
   resize: vertical;
   font-size: 11px;
   line-height: 1.6;
@@ -1191,7 +1192,7 @@ textarea:focus {
 }
 .document-field > b {
   position: absolute;
-  bottom: 12px;
+  bottom: 30px;
   left: 12px;
   padding: 7px 9px;
   border: 1px solid var(--line);
@@ -1203,6 +1204,24 @@ textarea:focus {
   color: #475467;
   font-size: 9px;
   cursor: pointer;
+}
+.file-state {
+  position: absolute;
+  right: 0;
+  bottom: 6px;
+  left: 0;
+  color: var(--subtle);
+  font-size: 8px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-state.success {
+  color: var(--green);
+}
+.file-state.error {
+  color: var(--red);
 }
 .privacy-strip {
   margin-top: 15px;
