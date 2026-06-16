@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from dotenv import load_dotenv
@@ -23,11 +24,16 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = Path(os.getenv("DATABASE_PATH", BASE_DIR / "coach.db"))
+DEFAULT_DB_PATH = Path("/tmp/coach.db") if os.getenv("VERCEL") else BASE_DIR / "coach.db"
+DB_PATH = Path(os.getenv("DATABASE_PATH", DEFAULT_DB_PATH))
+vercel_url = os.getenv("VERCEL_URL", "").strip()
+DEFAULT_ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
+if vercel_url:
+    DEFAULT_ALLOWED_ORIGINS = f"{DEFAULT_ALLOWED_ORIGINS},https://{vercel_url}"
 ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
-        "ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+        "ALLOWED_ORIGINS", DEFAULT_ALLOWED_ORIGINS
     ).split(",")
     if origin.strip()
 ]
@@ -61,7 +67,10 @@ app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=[
         host.strip()
-        for host in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,testserver").split(",")
+        for host in os.getenv(
+            "ALLOWED_HOSTS",
+            "*" if os.getenv("VERCEL") else "localhost,127.0.0.1,testserver",
+        ).split(",")
         if host.strip()
     ],
 )
@@ -73,7 +82,15 @@ async def security_middleware(request: Request, call_next):
         origin = request.headers.get("origin")
         uses_cookie = bool(request.cookies.get("aicoachy_session"))
         uses_bearer = request.headers.get("authorization", "").startswith("Bearer ")
-        if uses_cookie and not uses_bearer and origin and origin not in ALLOWED_ORIGINS:
+        origin_host = urlparse(origin).netloc if origin else ""
+        same_origin = bool(origin_host and origin_host == request.headers.get("host"))
+        if (
+            uses_cookie
+            and not uses_bearer
+            and origin
+            and origin not in ALLOWED_ORIGINS
+            and not same_origin
+        ):
             return JSONResponse(status_code=403, content={"detail": "Untrusted request origin"})
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"

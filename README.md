@@ -155,6 +155,24 @@ docker compose up --build
 Open `http://localhost:8080`. Interview data is persisted in the
 `coach-data` Docker volume.
 
+## Vercel
+
+This repo includes `vercel.json` and `api/index.py` so Vercel serves the Vite
+app and routes `/api/*` requests to FastAPI.
+
+Set these Vercel environment variables before deploying:
+
+```env
+ADMIN_EMAIL=sharjeelsafdar435@gmail.com
+ADMIN_EMAILS=sharjeelsafdar435@gmail.com
+COOKIE_SECURE=true
+```
+
+Vercel serverless functions can only write SQLite data to temporary storage.
+That is enough for smoke tests, but accounts and interview history are not
+durable across cold starts. Use Docker, a persistent server, or add hosted
+database persistence before relying on Vercel for production user data.
+
 ## Architecture
 
 - `React 19` and `Vite 8` for the application interface

@@ -240,7 +240,7 @@ async function api(path, options = {}) {
       : payload?.detail;
     if (response.status === 404 && path.startsWith("/auth/")) {
       throw new Error(
-        "This page is connected to an outdated or static backend. Open http://localhost:5173 and refresh.",
+        "This deployment is missing the API backend. Redeploy with the Vercel API routes and environment variables.",
       );
     }
     const error = new Error(detail || `Request failed (${response.status})`);
