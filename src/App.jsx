@@ -662,12 +662,12 @@ function Sidebar({ page, setPage, provider, onNew, user, onLogout }) {
         <div>
           <strong>
             {provider === "local"
-              ? "Local intelligence"
+              ? "Company interview prep"
               : `${provider} connected`}
           </strong>
           <small>
             {provider === "local"
-              ? "Private, no API key"
+              ? "Resume and job files supported"
               : "Enhanced AI coaching"}
           </small>
         </div>
